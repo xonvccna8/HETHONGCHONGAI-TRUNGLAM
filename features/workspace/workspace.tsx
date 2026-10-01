@@ -11,7 +11,7 @@ import { EditorPane, type EditorActivity } from "./editor-pane";
 import { MetricCards } from "./metric-cards";
 import { ProgressOverlay } from "./progress-overlay";
 import type { SessionUser } from "@/src/auth/session";
-import type { RewriteMode, RewriteResult, ScanReport, SentenceAnalysis, WritingProvenance } from "@/src/core/types";
+import type { HumanRevisionResult, RewriteMode, RewriteResult, ScanReport, SentenceAnalysis, WritingProvenance } from "@/src/core/types";
 
 const sample = `Trí tuệ nhân tạo đang ngày càng đóng vai trò quan trọng trong giáo dục. Các hệ thống học tập thích ứng có thể phân tích tiến độ của người học và điều chỉnh nội dung phù hợp với nhu cầu cá nhân.
 
@@ -34,6 +34,8 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
   const [selected, setSelected] = useState<SentenceAnalysis>();
   const [rewrite, setRewrite] = useState<RewriteResult>();
   const [rewriting, setRewriting] = useState(false);
+  const [humanRevision, setHumanRevision] = useState<HumanRevisionResult>();
+  const [humanRevising, setHumanRevising] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("Đang đọc tài liệu…");
@@ -84,7 +86,7 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     if (content.trim().length < 20 || scanning) return;
     const controller = new AbortController();
     abortRef.current = controller;
-    setScanning(true); setMessage(""); setProgress(6); setStage("Đang đọc tài liệu…"); setRewrite(undefined);
+    setScanning(true); setMessage(""); setProgress(6); setStage("Đang đọc tài liệu…"); setRewrite(undefined); setHumanRevision(undefined);
     const stages = [[18,"Đang chia cấu trúc…"],[34,"Đang phân tích trùng lặp…"],[48,"Đang tìm nguồn…"],[63,"Đang phân tích ngữ nghĩa…"]] as const;
     let stageIndex = 0;
     const timer = window.setInterval(() => {
@@ -122,7 +124,7 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     const body = await response.json();
     if (!response.ok) { setMessage(body.error ?? "Không thể đọc tệp."); return; }
     provenanceRef.current = createProvenance(true, body.text.length);
-    setText(body.text); setTitle(body.filename.replace(/\.[^.]+$/, "")); setView("edit"); setReport(undefined); setVersions([]); setDocumentId(undefined);
+    setText(body.text); setTitle(body.filename.replace(/\.[^.]+$/, "")); setView("edit"); setReport(undefined); setHumanRevision(undefined); setVersions([]); setDocumentId(undefined);
   }
 
   async function requestRewrite(mode: RewriteMode) {
@@ -137,6 +139,33 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     finally { setRewriting(false); }
   }
 
+  async function requestHumanRevision() {
+    if (!report || writingSample.trim().length < 80) return;
+    const ranked = [...(report.aiWriting.segments ?? [])].sort((left, right) => right.score - left.score);
+    const candidates = (ranked.filter((segment) => segment.score >= 60).length ? ranked.filter((segment) => segment.score >= 60) : ranked.slice(0, 3)).slice(0, 12);
+    if (!candidates.length) { setMessage("Không tìm thấy đoạn phù hợp để biên tập có mục tiêu."); return; }
+    setHumanRevising(true); setMessage(""); setHumanRevision(undefined);
+    try {
+      const response = await fetch("/api/human-revision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, writingSample, segments: candidates }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Không thể tạo bản biên tập.");
+      setHumanRevision(body as HumanRevisionResult);
+    } catch (error) { setMessage((error as Error).message); }
+    finally { setHumanRevising(false); }
+  }
+
+  function acceptHumanRevision() {
+    if (!humanRevision || humanRevision.appliedCount === 0 || humanRevision.revisedText === text) return;
+    const assistedCharacters = humanRevision.revisions.filter((item) => item.applied).reduce((sum, item) => sum + item.revisedText.length, 0);
+    const version: RevisionVersion = { id: crypto.randomUUID(), label: `Biên tập giọng văn ${Math.max(1, versions.length)}`, text: humanRevision.revisedText, createdAt: new Date().toISOString() };
+    provenanceRef.current = { ...provenanceRef.current, aiAssistedCharacters: provenanceRef.current.aiAssistedCharacters + assistedCharacters };
+    setText(humanRevision.revisedText); setVersions((items) => [...items, version]); setNeedsRescan(true); setView("compare"); setHumanRevision(undefined);
+  }
+
   function acceptRewrite() {
     if (!selected || !rewrite?.factCheck.safe) return;
     const revised = text.replace(selected.text, rewrite.rewrittenText);
@@ -147,12 +176,12 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
   }
 
   function restoreVersion(version: RevisionVersion) {
-    setText(version.text); setVersions((items) => [...items, { id: crypto.randomUUID(), label: `Khôi phục ${version.label}`, text: version.text, createdAt: new Date().toISOString() }]); setReport(undefined); setSelected(undefined); setRewrite(undefined); setNeedsRescan(true); setView("edit");
+    setText(version.text); setVersions((items) => [...items, { id: crypto.randomUUID(), label: `Khôi phục ${version.label}`, text: version.text, createdAt: new Date().toISOString() }]); setReport(undefined); setSelected(undefined); setRewrite(undefined); setHumanRevision(undefined); setNeedsRescan(true); setView("edit");
   }
 
   function newDocument() {
     provenanceRef.current = createProvenance();
-    setText(""); setTitle("Tài liệu chưa đặt tên"); setReport(undefined); setSelected(undefined); setRewrite(undefined); setVersions([]); setDocumentId(undefined); setNeedsRescan(false); setView("edit");
+    setText(""); setTitle("Tài liệu chưa đặt tên"); setReport(undefined); setSelected(undefined); setRewrite(undefined); setHumanRevision(undefined); setVersions([]); setDocumentId(undefined); setNeedsRescan(false); setView("edit");
   }
 
   function downloadWordReport() {
@@ -196,7 +225,7 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
           <div className="surface mt-5 overflow-hidden rounded-[22px]"><div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3"><div className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${view === "review" ? "bg-[var(--coral)]" : view === "compare" ? "bg-[var(--violet)]" : "bg-[var(--brand)]"}`} /><span className="text-[12px] font-bold uppercase tracking-[.14em] text-[var(--muted)]">{view === "review" ? "Sentence-level review" : view === "compare" ? "Before / After" : "Document editor"}</span></div><div className="flex items-center gap-3"><label className="hidden items-center gap-2 text-[11px] text-[var(--muted)] sm:flex"><input type="checkbox" checked={ephemeral} onChange={(event) => setEphemeral(event.target.checked)} /> Không lưu sau xử lý</label><button className="rounded-lg p-1.5 text-[var(--muted)]" aria-label="Tùy chọn"><MoreHorizontal size={18} /></button></div></div>{view === "review" && report ? <AnalysisViewer report={report} selectedId={selected?.sentenceId} onSelect={(sentence) => { setSelected(sentence); setRewrite(undefined); }} /> : view === "compare" ? <CompareView original={originalText} current={text} versions={versions} onRestore={restoreVersion} /> : <EditorPane value={text} onActivity={recordActivity} onChange={(value) => { setText(value); if (report) setNeedsRescan(true); }} />}</div>
         </div></section>
 
-        <AssistantPanel report={report} selected={selected} rewrite={rewrite} rewriting={rewriting} writingSample={writingSample} onWritingSample={setWritingSample} onRewrite={requestRewrite} onAccept={acceptRewrite} onPrint={() => window.print()} onDownload={downloadWordReport} />
+        <AssistantPanel report={report} selected={selected} rewrite={rewrite} rewriting={rewriting} humanRevision={humanRevision} humanRevising={humanRevising} writingSample={writingSample} onWritingSample={setWritingSample} onRewrite={requestRewrite} onAccept={acceptRewrite} onHumanRevision={requestHumanRevision} onAcceptHumanRevision={acceptHumanRevision} onPrint={() => window.print()} onDownload={downloadWordReport} />
       </div>
       {report && <section className="print-only hidden p-10"><h1 className="serif text-4xl">ORIGIN AI — Originality Report</h1><h2 className="mt-3 text-xl">{title}</h2><p className="mt-6">Nguyên bản: {report.metrics.originality}% · Tương đồng: {report.metrics.similarity}% · Trích dẫn đúng: {report.metrics.properCitation}% · Nguồn: {report.metrics.sourcesFound}</p><p className="mt-2">Chỉ báo AI: {report.aiWriting.score}% · Độ tin cậy: {report.aiWriting.confidence ?? "—"}%</p><h3 className="mt-8 text-lg font-bold">Đoạn đã phân tích</h3>{report.sentences.map((sentence) => <div key={sentence.sentenceId} className="mt-4 border-b pb-4"><b>{sentence.kind} · {sentence.similarity}%</b><p>{sentence.text}</p><small>{sentence.reason}</small></div>)}<p className="mt-8 text-sm">{report.aiWriting.disclaimer}</p></section>}
     </main>

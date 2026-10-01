@@ -19,6 +19,7 @@ export function GET() {
       similarityEvidenceGraph: true,
       crossLanguageSimilarity: Boolean(process.env.OPENAI_API_KEY),
       aiSimilarityVerifier: process.env.AI_SIMILARITY_VERIFIER_ENABLED !== "false" && Boolean(process.env.OPENAI_API_KEY),
+      humanRevisionCoach: Boolean(process.env.OPENAI_API_KEY),
       database: Boolean(process.env.DATABASE_URL),
       queue: Boolean(process.env.REDIS_URL),
     },

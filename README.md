@@ -18,6 +18,7 @@ ORIGIN AI là workspace kiểm tra trùng lặp, truy tìm nguồn và hỗ tr�
 - AI Authorship Ensemble kết hợp tín hiệu văn phong, GPT‑6 Astra phản biện, Copyleaks, FAID và VietAIDetector; detector chưa cấu hình được hiển thị rõ thay vì âm thầm tạo điểm giả.
 - Phân tích tác giả theo từng đoạn, đo mức đồng thuận và chủ động trả về “chưa đủ bằng chứng” khi các detector xung đột.
 - Bằng chứng quá trình ghi nhận tỷ lệ nhập trực tiếp, dán, nhập tệp, AI hỗ trợ, thời gian chỉnh sửa và số phiên bản; đây là dữ liệu hỗ trợ, không phải chữ ký pháp lý.
+- Human Revision Coach cho phép biên tập hàng loạt các đoạn máy móc dựa trên mẫu văn thật của người dùng; đoạn thiếu thông tin cá nhân được giữ nguyên và chuyển thành câu hỏi thay vì bịa nội dung. Mọi thay đổi đều qua Fact Preservation, duyệt trước–sau và được ghi nhận là AI hỗ trợ.
 - Preview/accept rewrite, before/after, version history, restore và smart rescan theo fingerprint.
 - Report có bản in/PDF và bản Word-compatible.
 - PostgreSQL + pgvector schema, Redis/BullMQ worker, Docker Compose.

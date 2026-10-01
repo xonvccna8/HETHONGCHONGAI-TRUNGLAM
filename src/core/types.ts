@@ -240,3 +240,26 @@ export interface RewriteResult {
   factCheck: FactCheckResult;
   confidence: number;
 }
+
+export interface HumanRevisionItem {
+  segmentId: string;
+  originalText: string;
+  revisedText: string;
+  rationale: string;
+  changes: string[];
+  factCheck: FactCheckResult;
+  applied: boolean;
+  question?: string;
+}
+
+export interface HumanRevisionResult {
+  revisedText: string;
+  revisions: HumanRevisionItem[];
+  appliedCount: number;
+  skippedCount: number;
+  summary: string;
+  questions: string[];
+  voiceObservations: string[];
+  confidence: number;
+  disclaimer: string;
+}
