@@ -2,6 +2,7 @@
 
 import { Bell, ChevronDown, FilePlus2, FileText, History, LayoutDashboard, Menu, MoreHorizontal, ScanLine, Settings, ShieldCheck, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AnalysisViewer } from "./analysis-viewer";
@@ -12,6 +13,8 @@ import { MetricCards } from "./metric-cards";
 import { ProgressOverlay } from "./progress-overlay";
 import type { SessionUser } from "@/src/auth/session";
 import type { HumanRevisionResult, RewriteMode, RewriteResult, ScanReport, SentenceAnalysis, WritingProvenance } from "@/src/core/types";
+import { signOut } from "@firebase/auth";
+import { firebaseAuth } from "@/src/auth/firebase-client";
 
 const sample = `Trí tuệ nhân tạo đang ngày càng đóng vai trò quan trọng trong giáo dục. Các hệ thống học tập thích ứng có thể phân tích tiến độ của người học và điều chỉnh nội dung phù hợp với nhu cầu cá nhân.
 
@@ -26,6 +29,7 @@ function createProvenance(imported = false, importedCharacters = 0): WritingProv
 }
 
 export function Workspace({ user, startWithSample }: { user: SessionUser; startWithSample: boolean }) {
+  const router = useRouter();
   const initialText = startWithSample ? sample : "";
   const [text, setText] = useState(initialText);
   const [title, setTitle] = useState(startWithSample ? "AI trong giáo dục" : "Tài liệu chưa đặt tên");
@@ -184,6 +188,11 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     setText(""); setTitle("Tài liệu chưa đặt tên"); setReport(undefined); setSelected(undefined); setRewrite(undefined); setHumanRevision(undefined); setVersions([]); setDocumentId(undefined); setNeedsRescan(false); setView("edit");
   }
 
+  async function logout() {
+    await Promise.allSettled([signOut(firebaseAuth), fetch("/api/auth/logout", { method: "POST" })]);
+    router.push("/");
+  }
+
   function downloadWordReport() {
     if (!report) return;
     const rows = report.sentences.map((item) => `<tr><td>${escapeHtml(item.text)}</td><td>${item.kind}</td><td>${item.similarity}%</td><td>${escapeHtml(item.reason)}</td></tr>`).join("");
@@ -216,7 +225,7 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
       </header>
 
       <div className="grid min-h-[calc(100vh-72px)] lg:grid-cols-[76px_minmax(0,1fr)_360px] xl:grid-cols-[230px_minmax(0,1fr)_390px]">
-        <aside className="no-print hidden border-r border-[var(--line)] bg-[var(--surface)] px-3 py-5 lg:flex lg:flex-col xl:px-4"><button onClick={newDocument} className="focus-ring flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--ink)] text-sm font-bold text-[var(--surface)] xl:px-4"><FilePlus2 size={17} /><span className="hidden xl:inline">Tài liệu mới</span></button><nav className="mt-7 space-y-2" aria-label="Workspace"><SideItem active={view !== "compare"} icon={LayoutDashboard} label="Workspace" onClick={() => setView(report ? "review" : "edit")} /><SideItem active={view === "edit"} icon={FileText} label="Soạn thảo" onClick={() => setView("edit")} /><SideItem active={view === "compare"} icon={History} label="Phiên bản" onClick={() => setView("compare")} /></nav><div className="mt-7 hidden xl:block"><p className="px-3 text-[11px] font-bold uppercase tracking-[.16em] text-[var(--muted)]">Gần đây</p><button className="mt-3 w-full rounded-xl bg-[var(--surface-2)] p-3 text-left"><span className="block truncate text-[13px] font-bold">{title}</span><span className="mt-1 block text-[11px] text-[var(--muted)]">{versions.length || 1} phiên bản</span></button></div><div className="mt-auto space-y-2"><SideItem icon={ShieldCheck} label="Quyền riêng tư" /><SideItem icon={Settings} label="Cài đặt" /><form action="/api/auth/logout" method="post" className="hidden pt-2 xl:block"><button className="text-[12px] font-semibold text-[var(--muted)] hover:text-[var(--coral)]">Đăng xuất · {user.email}</button></form></div></aside>
+        <aside className="no-print hidden border-r border-[var(--line)] bg-[var(--surface)] px-3 py-5 lg:flex lg:flex-col xl:px-4"><button onClick={newDocument} className="focus-ring flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--ink)] text-sm font-bold text-[var(--surface)] xl:px-4"><FilePlus2 size={17} /><span className="hidden xl:inline">Tài liệu mới</span></button><nav className="mt-7 space-y-2" aria-label="Workspace"><SideItem active={view !== "compare"} icon={LayoutDashboard} label="Workspace" onClick={() => setView(report ? "review" : "edit")} /><SideItem active={view === "edit"} icon={FileText} label="Soạn thảo" onClick={() => setView("edit")} /><SideItem active={view === "compare"} icon={History} label="Phiên bản" onClick={() => setView("compare")} /></nav><div className="mt-7 hidden xl:block"><p className="px-3 text-[11px] font-bold uppercase tracking-[.16em] text-[var(--muted)]">Gần đây</p><button className="mt-3 w-full rounded-xl bg-[var(--surface-2)] p-3 text-left"><span className="block truncate text-[13px] font-bold">{title}</span><span className="mt-1 block text-[11px] text-[var(--muted)]">{versions.length || 1} phiên bản</span></button></div><div className="mt-auto space-y-2"><SideItem icon={ShieldCheck} label="Quyền riêng tư" /><SideItem icon={Settings} label="Cài đặt" /><button onClick={logout} className="hidden pt-2 text-left text-[12px] font-semibold text-[var(--muted)] hover:text-[var(--coral)] xl:block">Đăng xuất · {user.email}</button></div></aside>
 
         <section className="min-w-0 p-4 lg:p-6 xl:p-7"><div className="mx-auto max-w-[1080px]">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4"><div><span className="text-[11px] font-bold uppercase tracking-[.18em] text-[var(--brand)]">ORIGINALITY WORKSPACE</span><h1 className="serif mt-1 text-[30px] font-normal">{view === "compare" ? "So sánh phiên bản" : view === "review" ? "Kết quả phân tích" : "Kiểm tra tài liệu"}</h1></div><div className="flex flex-wrap gap-2"><input ref={inputRef} type="file" accept=".docx,.pdf,.txt,.md" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadFile(file); event.target.value = ""; }} /><button onClick={() => inputRef.current?.click()} className="focus-ring flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-sm font-bold"><Upload size={16} /> Tải tệp</button>{report && <button onClick={() => setView(view === "review" ? "edit" : "review")} className="focus-ring rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-sm font-bold">{view === "review" ? "Chỉnh sửa" : "Xem highlight"}</button>}<button onClick={() => void scanDocument()} disabled={text.trim().length < 20 || scanning} className="focus-ring flex items-center gap-2 rounded-xl bg-[var(--brand)] px-5 py-2.5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(13,148,136,.18)] disabled:cursor-not-allowed disabled:opacity-40"><ScanLine size={17} /> {needsRescan ? "Quét lại" : "Quét tài liệu"}</button></div></div>

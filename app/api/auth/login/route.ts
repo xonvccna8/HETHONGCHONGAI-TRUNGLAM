@@ -9,6 +9,9 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  if (process.env.ENABLE_DEMO_AUTH !== "true") {
+    return NextResponse.json({ error: "Ứng dụng hiện sử dụng Firebase Authentication." }, { status: 410 });
+  }
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Thông tin đăng nhập chưa hợp lệ." }, { status: 400 });
   const expectedEmail = process.env.DEMO_LOGIN_EMAIL ?? (process.env.NODE_ENV === "production" ? "" : "demo@origin.ai");

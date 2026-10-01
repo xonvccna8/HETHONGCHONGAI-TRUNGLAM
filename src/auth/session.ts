@@ -4,8 +4,11 @@ import { cookies } from "next/headers";
 const COOKIE_NAME = "origin_session";
 
 export interface SessionUser {
+  uid?: string;
   email: string;
   name: string;
+  provider?: string;
+  emailVerified?: boolean;
 }
 
 function secret() {
@@ -15,7 +18,7 @@ function secret() {
 }
 
 export async function createSession(user: SessionUser) {
-  const token = await new SignJWT({ email: user.email, name: user.name })
+  const token = await new SignJWT({ uid: user.uid, email: user.email, name: user.name, provider: user.provider, emailVerified: user.emailVerified })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("12h")
@@ -40,8 +43,8 @@ export async function getSession(): Promise<SessionUser | null> {
   if (!token) return null;
   try {
     const verified = await jwtVerify(token, secret());
-    const { email, name } = verified.payload as unknown as SessionUser;
-    return email && name ? { email, name } : null;
+    const { uid, email, name, provider, emailVerified } = verified.payload as unknown as SessionUser;
+    return email && name ? { uid, email, name, provider, emailVerified } : null;
   } catch {
     return null;
   }

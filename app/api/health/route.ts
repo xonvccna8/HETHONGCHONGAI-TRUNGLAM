@@ -20,6 +20,7 @@ export function GET() {
       crossLanguageSimilarity: Boolean(process.env.OPENAI_API_KEY),
       aiSimilarityVerifier: process.env.AI_SIMILARITY_VERIFIER_ENABLED !== "false" && Boolean(process.env.OPENAI_API_KEY),
       humanRevisionCoach: Boolean(process.env.OPENAI_API_KEY),
+      firebaseAuth: Boolean((process.env.FIREBASE_WEB_API_KEY ?? process.env.NEXT_PUBLIC_FIREBASE_API_KEY) && process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
       database: Boolean(process.env.DATABASE_URL),
       queue: Boolean(process.env.REDIS_URL),
     },

@@ -4,7 +4,7 @@ ORIGIN AI là workspace kiểm tra trùng lặp, truy tìm nguồn và hỗ tr�
 
 ## MVP hiện có
 
-- Landing page, đăng nhập và workspace responsive, light/dark mode.
+- Landing page, đăng ký/đăng nhập Firebase bằng email hoặc Google, khôi phục mật khẩu và workspace responsive, light/dark mode.
 - Dán văn bản hoặc đọc DOCX, PDF, TXT, MD (tối đa 10 MB).
 - Parser theo section → paragraph → sentence với ID và fingerprint ổn định.
 - Evidence Graph v2 kết hợp multi-resolution shingles/containment, fuzzy alignment, semantic embeddings/cosine và weighted scoring trên từng đoạn nguồn cục bộ.
@@ -40,7 +40,7 @@ npm install
 npm run dev
 ```
 
-Mở `http://localhost:3000`. Ở môi trường development, tài khoản mặc định là `demo@origin.ai` / `origin2026`. Hãy đổi hoặc xóa thông tin này khi triển khai.
+Mở `http://localhost:3000` và tạo tài khoản bằng Firebase Authentication. Trước lần chạy đầu, bật Email/Password và Google trong Firebase Console → Authentication → Sign-in method; thêm tên miền local/production vào Authorized domains.
 
 Chế độ này vẫn chạy exact, fuzzy, citation, fact preservation và writing signals thực. Giao diện nói rõ khi chưa cấu hình web search/embeddings; hệ thống không tạo nguồn giả.
 
@@ -75,7 +75,9 @@ Sao chép `.env.example`; không commit `.env`.
 - `SOURCE_DISCOVERY_MAX_QUERIES`, `SOURCE_DISCOVERY_MAX_SOURCES`: giới hạn bề rộng truy tìm nguồn và chi phí.
 - `S3_*`: cấu hình object storage S3-compatible cho production.
 - `AUTH_SECRET`: khóa ký cookie; bắt buộc phải là chuỗi dài ngẫu nhiên ở production.
-- `DEMO_LOGIN_EMAIL`, `DEMO_LOGIN_PASSWORD`: tài khoản local; thay bằng SSO/OIDC khi production.
+- `NEXT_PUBLIC_FIREBASE_*`: cấu hình Firebase Web được đóng gói ở phía trình duyệt; API key Firebase là định danh công khai và vẫn cần giới hạn API/domain trong Google Cloud Console.
+- `FIREBASE_WEB_API_KEY`: bản cấu hình phía máy chủ dùng để kiểm tra Firebase ID token trước khi tạo cookie HTTP-only.
+- `ENABLE_DEMO_AUTH`: chỉ bật khi cần kiểm thử đăng nhập cũ trong môi trường nội bộ; mặc định tắt.
 
 ## Database migration
 
@@ -111,7 +113,7 @@ AI-writing analysis tổng hợp nhiều bộ máy nhưng vẫn có thể false 
 ## Production checklist
 
 - Đặt reverse proxy/TLS, secret manager và object storage signed URL.
-- Thay tài khoản demo bằng OIDC/SSO và bật MFA theo chính sách tổ chức.
+- Bật Email/Password và Google provider, cấu hình Authorized domains, giới hạn Firebase Web API key và cân nhắc MFA theo chính sách tổ chức.
 - Áp dụng migration, backup PostgreSQL/Redis và retention job cho tài liệu ephemeral.
 - Thiết lập rate limiting tập trung, audit sink và malware scanning cho file upload.
 - Chạy benchmark trên corpus đúng lĩnh vực trước khi hiệu chỉnh threshold hoặc công bố chất lượng.
