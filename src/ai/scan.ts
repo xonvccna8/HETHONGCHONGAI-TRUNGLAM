@@ -3,8 +3,11 @@ import { discoverSources } from "./source-discovery";
 import { analyzeSimilarity, type SemanticPairScores } from "@/src/core/similarity";
 import { parseDocument } from "@/src/core/text";
 import { runAiCouncil } from "@/src/agents/council";
+import { analyzeWritingSignals } from "@/src/core/writing-signals";
+import { runAuthorshipEnsemble } from "./authorship-detector";
 
 export async function runScan(text: string) {
+  const authorship = runAuthorshipEnsemble(text, analyzeWritingSignals(text));
   const sources = await discoverSources(text);
   const parsed = parseDocument(text);
   const sourceTexts = sources.map((source) => source.snippet).filter(Boolean);
@@ -21,7 +24,7 @@ export async function runScan(text: string) {
       }
     }
   }
-  const report = analyzeSimilarity(text, sources, semantic);
+  const report = { ...analyzeSimilarity(text, sources, semantic), aiWriting: await authorship };
   const council = await runAiCouncil(text, report);
   return council ? { ...report, council } : report;
 }

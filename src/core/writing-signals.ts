@@ -31,7 +31,7 @@ export function analyzeWritingSignals(text: string): AiWritingSignals {
     disclaimer: "Kết quả chỉ là chỉ báo thống kê và không chứng minh chắc chắn văn bản được viết bởi AI.",
     signals: [
       { label: "Độ đồng đều câu", score: Math.round(uniformity * 100), detail: "So sánh phân bố độ dài giữa các câu." },
-      { label: "Đa dạng từ vựng", score: Math.round(diversity * 100), detail: "Tỷ lệ từ vựng khác nhau trong văn bản." },
+      { label: "Thiếu đa dạng từ vựng", score: Math.round((1 - diversity) * 100), detail: "Mức lặp lại từ vựng; điểm cao hơn nghĩa là ít đa dạng hơn." },
       { label: "Mật độ chuyển ý", score: Math.round(clamp(transitionDensity) * 100), detail: "Tần suất các cụm chuyển ý có tính khuôn mẫu." },
       { label: "Cụm từ chung chung", score: Math.round(clamp(genericDensity) * 100), detail: "Mật độ phát biểu khái quát và ít dấu ấn cá nhân." },
     ],

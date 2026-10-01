@@ -11,6 +11,8 @@ export const matchKinds = [
 
 export type MatchKind = (typeof matchKinds)[number];
 export type RiskLevel = "very-low" | "low" | "medium" | "high";
+export type AuthorshipLabel = "human" | "mixed" | "ai" | "inconclusive";
+export type DetectorStatus = "completed" | "unavailable" | "skipped" | "failed";
 
 export interface ParsedSentence {
   id: string;
@@ -70,8 +72,22 @@ export interface SentenceAnalysis {
 export interface AiWritingSignals {
   risk: RiskLevel;
   score: number;
+  confidence?: number;
+  label?: AuthorshipLabel;
+  flaggedShare?: number;
+  method?: "stylometry" | "multi-detector-ensemble";
   disclaimer: string;
   signals: Array<{ label: string; score: number; detail: string }>;
+  detectors?: Array<{
+    id: "stylometry" | "openai-reviewer" | "copyleaks" | "faid";
+    name: string;
+    status: DetectorStatus;
+    score?: number;
+    confidence?: number;
+    label: AuthorshipLabel;
+    detail: string;
+    model?: string;
+  }>;
 }
 
 export interface ScanMetrics {

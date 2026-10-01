@@ -1,14 +1,12 @@
 import { BookCheck, Fingerprint, Radar, ScanSearch } from "lucide-react";
-import type { ScanMetrics, RiskLevel } from "@/src/core/types";
+import type { AiWritingSignals, ScanMetrics } from "@/src/core/types";
 
-const riskLabel: Record<RiskLevel, string> = { "very-low": "Rất thấp", low: "Thấp", medium: "Trung bình", high: "Cao" };
-
-export function MetricCards({ metrics, risk }: { metrics?: ScanMetrics; risk?: RiskLevel }) {
+export function MetricCards({ metrics, aiWriting }: { metrics?: ScanMetrics; aiWriting?: AiWritingSignals }) {
   const items = [
     { label: "Nguyên bản", value: metrics ? `${metrics.originality}%` : "—", icon: Fingerprint, tone: "brand", gradient: "from-violet-500 to-indigo-500" },
     { label: "Tương đồng", value: metrics ? `${metrics.similarity}%` : "—", icon: ScanSearch, tone: "coral", gradient: "from-orange-400 to-rose-500" },
     { label: "Trích dẫn", value: metrics ? `${metrics.properCitation}%` : "—", icon: BookCheck, tone: "violet", gradient: "from-cyan-400 to-blue-500" },
-    { label: "AI-writing", value: risk ? riskLabel[risk] : "—", icon: Radar, tone: "amber", gradient: "from-amber-400 to-orange-500" },
+    { label: "Chỉ báo AI", value: aiWriting ? `${aiWriting.score}%` : "—", icon: Radar, tone: "amber", gradient: "from-amber-400 to-orange-500" },
     { label: "Nguồn", value: metrics ? String(metrics.sourcesFound) : "—", icon: Radar, tone: "brand", gradient: "from-emerald-400 to-teal-500" },
   ];
   return (

@@ -13,7 +13,8 @@ ORIGIN AI là workspace kiểm tra trùng lặp, truy tìm nguồn và hỗ tr�
 - AI Council gồm sáu chuyên gia song song và một Quality Reviewer, có phản biện chéo, lưu disagreement và model routing theo vai trò.
 - Sentence-level review, exact/fuzzy/semantic score và giải thích.
 - Originality Rewrite Agent với bốn chế độ, Responses API Structured Outputs và fallback cục bộ khi chưa có khóa.
-- Citation Guard, Fact Preservation, AI Writing Signal Engine và Human Writing Coach.
+- Citation Guard, Fact Preservation, AI Authorship Ensemble và Human Writing Coach.
+- AI Authorship Ensemble kết hợp tín hiệu văn phong, GPT‑6 Astra phản biện, Copyleaks tiếng Việt và FAID endpoint; detector chưa cấu hình được hiển thị rõ thay vì âm thầm tạo điểm giả.
 - Preview/accept rewrite, before/after, version history, restore và smart rescan theo fingerprint.
 - Report có bản in/PDF và bản Word-compatible.
 - PostgreSQL + pgvector schema, Redis/BullMQ worker, Docker Compose.
@@ -57,6 +58,9 @@ Sao chép `.env.example`; không commit `.env`.
 - `AI_COUNCIL_ENABLED`: bật hội đồng AI; mặc định `false` để kiểm soát chi phí.
 - `AI_COUNCIL_TRIGGER`: `suspicious` chỉ chạy khi có tín hiệu đáng ngờ; `always` chạy với mọi tài liệu.
 - `AI_AGENT_*_MODEL`: chọn model riêng cho từng specialist và Quality Reviewer.
+- `AI_AUTHORSHIP_REVIEW_ENABLED`, `AI_AUTHORSHIP_REVIEW_MODEL`: bật bộ phản biện tác giả bằng OpenAI Structured Outputs.
+- `COPYLEAKS_EMAIL`, `COPYLEAKS_API_KEY`: bật Copyleaks AI Detector; `COPYLEAKS_SENSITIVITY` nhận giá trị 1–3.
+- `FAID_API_URL`, `FAID_API_TOKEN`: kết nối dịch vụ FAID chạy trên GPU. Endpoint nhận `{ text, language }` và trả `probabilities` hoặc `scores` gồm `human`, `llm`/`ai`, `collaborative`/`mixed`.
 - `DATABASE_URL`: persistence PostgreSQL; nếu bỏ trống app chạy session mode.
 - `REDIS_URL`: queue, progress và cache; nếu bỏ trống scan chạy inline.
 - `SEARCH_PROVIDER`: `openai`, `tavily`, `serper` hoặc `none`.
@@ -94,7 +98,7 @@ Rewrite chạy theo `understand → claims/evidence/citations → restructure �
 
 ## Giới hạn AI-writing detection
 
-AI-writing analysis dựa trên phân bố độ dài câu, lexical diversity, repetition, transition density, uniformity và generic phrasing. Các feature này có false positive với văn phong học thuật, người học ngôn ngữ và văn bản đã biên tập kỹ. Vì vậy giao diện chỉ hiển thị Very Low/Low/Medium/High kèm cảnh báo, không gắn nhãn tác giả và không hỗ trợ “bypass detector”.
+AI-writing analysis tổng hợp nhiều bộ máy nhưng vẫn có thể false positive với văn phong học thuật, người học ngôn ngữ, bản dịch và văn bản đã biên tập kỹ. Điểm hiển thị là chỉ báo tổng hợp, không phải xác suất pháp lý hay bằng chứng tác giả. Kết quả luôn kèm độ tin cậy, trạng thái từng detector và cảnh báo không dùng làm căn cứ duy nhất cho quyết định bất lợi.
 
 ## Production checklist
 
