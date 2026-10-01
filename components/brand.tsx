@@ -1,16 +1,17 @@
 import Link from "next/link";
+import { Fingerprint } from "lucide-react";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/" className="focus-ring inline-flex items-center gap-3 rounded-xl" aria-label="ORIGIN AI — Trang chủ">
-      <span className="relative grid h-10 w-10 place-items-center overflow-hidden rounded-[13px] bg-[#071f2a] shadow-[0_8px_20px_rgba(13,148,136,.2)]">
-        <span className="h-4 w-5 rounded-full border-[3px] border-[#5eead4]" />
-        <span className="absolute bottom-[8px] left-[7px] h-2.5 w-2.5 rounded-full bg-[#fb7185]" />
+      <span className="relative grid h-10 w-10 place-items-center overflow-hidden rounded-[13px] bg-gradient-to-br from-violet-600 via-indigo-500 to-cyan-400 text-white shadow-[0_10px_28px_rgba(99,91,255,.28)]">
+        <span className="absolute -right-2 -top-2 h-5 w-5 rounded-full bg-white/35 blur-sm" />
+        <Fingerprint size={21} strokeWidth={2.4} />
       </span>
       {!compact && (
         <span className="leading-none">
-          <strong className="block tracking-[.16em] text-[15px]">ORIGIN AI</strong>
-          <small className="mt-1 block text-[10px] font-bold tracking-[.15em] text-[var(--muted)]">ORIGINALITY STUDIO</small>
+          <strong className="block tracking-[.12em] text-[15px] font-black">ORIGIN AI</strong>
+          <small className="mt-1 block text-[9px] font-extrabold tracking-[.18em] text-[var(--muted)]">INTELLIGENCE STUDIO</small>
         </span>
       )}
     </Link>
