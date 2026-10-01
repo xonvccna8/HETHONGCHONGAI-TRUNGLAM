@@ -22,16 +22,26 @@ const firebaseErrors: Record<string, string> = {
   "auth/invalid-credential": "Email hoặc mật khẩu chưa chính xác.",
   "auth/invalid-email": "Địa chỉ email chưa hợp lệ.",
   "auth/weak-password": "Mật khẩu chưa đủ mạnh.",
+  "auth/password-does-not-meet-requirements": "Mật khẩu chưa đáp ứng chính sách bảo mật của Firebase. Hãy dùng mật khẩu dài hơn, có chữ hoa, chữ thường, số và ký tự đặc biệt.",
   "auth/popup-closed-by-user": "Cửa sổ Google đã được đóng trước khi hoàn tất.",
   "auth/popup-blocked": "Trình duyệt đang chặn cửa sổ đăng nhập Google.",
   "auth/unauthorized-domain": "Tên miền này chưa được cho phép trong Firebase Authentication.",
   "auth/operation-not-allowed": "Phương thức đăng nhập này chưa được bật trong Firebase.",
+  "auth/admin-restricted-operation": "Firebase đang chặn đăng ký email. Hãy bật Email/Password trong Firebase Authentication.",
+  "auth/configuration-not-found": "Firebase Authentication chưa được cấu hình cho dự án này.",
+  "auth/invalid-api-key": "Firebase API key không hợp lệ hoặc bị giới hạn cho tên miền này.",
   "auth/too-many-requests": "Có quá nhiều lần thử. Vui lòng đợi một lúc rồi thử lại.",
 };
 
 function readableError(error: unknown) {
   const code = typeof error === "object" && error && "code" in error ? String((error as { code?: string }).code) : "";
-  return firebaseErrors[code] ?? "Không thể xác thực lúc này. Vui lòng thử lại.";
+  if (firebaseErrors[code]) return firebaseErrors[code];
+  if (code.startsWith("auth/") && (code.includes("api-key") || code.includes("referer"))) {
+    return "Firebase từ chối API key trên tên miền này. Hãy kiểm tra giới hạn API key và miền được phép trong Firebase.";
+  }
+  return code.startsWith("auth/")
+    ? `Firebase từ chối yêu cầu (${code}). Hãy gửi mã lỗi này để kiểm tra tiếp.`
+    : "Không thể xác thực lúc này. Vui lòng thử lại.";
 }
 
 function passwordStrength(value: string) {
