@@ -1,0 +1,159 @@
+export const matchKinds = [
+  "EXACT",
+  "HIGH_SIMILARITY",
+  "SEMANTIC_OVERLAP",
+  "COMMON_KNOWLEDGE",
+  "QUOTED",
+  "CITED",
+  "POSSIBLE_MISSING_CITATION",
+  "ORIGINAL",
+] as const;
+
+export type MatchKind = (typeof matchKinds)[number];
+export type RiskLevel = "very-low" | "low" | "medium" | "high";
+
+export interface ParsedSentence {
+  id: string;
+  text: string;
+  start: number;
+  end: number;
+  paragraphId: string;
+  sectionId: string;
+}
+
+export interface ParsedParagraph {
+  id: string;
+  text: string;
+  sentenceIds: string[];
+  sectionId: string;
+}
+
+export interface ParsedSection {
+  id: string;
+  heading: string;
+  paragraphIds: string[];
+}
+
+export interface ParsedDocument {
+  fingerprint: string;
+  sections: ParsedSection[];
+  paragraphs: ParsedParagraph[];
+  sentences: ParsedSentence[];
+}
+
+export interface DiscoveredSource {
+  id: string;
+  title: string;
+  url: string;
+  domain: string;
+  snippet: string;
+  retrievedAt: string;
+  verified: boolean;
+}
+
+export interface SentenceAnalysis {
+  sentenceId: string;
+  text: string;
+  kind: MatchKind;
+  similarity: number;
+  exactScore: number;
+  fuzzyScore: number;
+  semanticScore: number;
+  sourceId?: string;
+  sourceText?: string;
+  reason: string;
+  suggestedAction: string;
+  citationProtected: boolean;
+  internalMatchSentenceId?: string;
+}
+
+export interface AiWritingSignals {
+  risk: RiskLevel;
+  score: number;
+  disclaimer: string;
+  signals: Array<{ label: string; score: number; detail: string }>;
+}
+
+export interface ScanMetrics {
+  originality: number;
+  similarity: number;
+  properCitation: number;
+  sourcesFound: number;
+  composition: {
+    exact: number;
+    semantic: number;
+    cited: number;
+    quotes: number;
+    original: number;
+  };
+}
+
+export interface ScanReport {
+  id: string;
+  createdAt: string;
+  fingerprint: string;
+  metrics: ScanMetrics;
+  sentences: SentenceAnalysis[];
+  sources: Array<DiscoveredSource & { contribution: number }>;
+  aiWriting: AiWritingSignals;
+  council?: CouncilReview;
+  limitations: string[];
+}
+
+export type CouncilAgentRole =
+  | "document-analyst"
+  | "similarity-critic"
+  | "source-auditor"
+  | "citation-guardian"
+  | "writing-coach"
+  | "risk-reviewer"
+  | "quality-reviewer";
+
+export interface CouncilFinding {
+  type: "support" | "warning" | "disagreement" | "recommendation";
+  sentenceId?: string;
+  summary: string;
+  evidence: string;
+  confidence: number;
+  agent: CouncilAgentRole;
+}
+
+export interface CouncilAgentRun {
+  role: CouncilAgentRole;
+  model: string;
+  status: "completed" | "failed" | "skipped";
+  latencyMs: number;
+  findingCount: number;
+}
+
+export interface CouncilReview {
+  mode: "deterministic-council";
+  summary: string;
+  confidence: number;
+  consensus: string[];
+  disagreements: string[];
+  priorities: string[];
+  findings: CouncilFinding[];
+  agents: CouncilAgentRun[];
+  completedAt: string;
+}
+
+export interface FactCheckResult {
+  safe: boolean;
+  missingFacts: string[];
+  addedFacts: string[];
+  changedFacts: string[];
+  preservedCitations: boolean;
+  citationsBefore: string[];
+  citationsAfter: string[];
+}
+
+export type RewriteMode = "light" | "deep" | "personal" | "academic";
+
+export interface RewriteResult {
+  rewrittenText: string;
+  rationale: string;
+  changes: string[];
+  factCheck: FactCheckResult;
+  confidence: number;
+}

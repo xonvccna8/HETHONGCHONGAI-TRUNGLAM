@@ -1,0 +1,9 @@
+[
+  { "id": "exact-01", "kind": "exact", "original": "Trí tuệ nhân tạo đang ngày càng đóng vai trò quan trọng trong giáo dục.", "candidate": "Trí tuệ nhân tạo đang ngày càng đóng vai trò quan trọng trong giáo dục.", "positive": true },
+  { "id": "partial-01", "kind": "partial", "original": "Trí tuệ nhân tạo đang ngày càng đóng vai trò quan trọng trong giáo dục.", "candidate": "Trí tuệ nhân tạo ngày càng giữ vai trò quan trọng đối với giáo dục.", "positive": true },
+  { "id": "reorder-01", "kind": "reordered", "original": "Giáo viên cần đánh giá công nghệ dựa trên bằng chứng trước khi áp dụng.", "candidate": "Trước khi áp dụng công nghệ, giáo viên cần dựa trên bằng chứng để đánh giá.", "positive": true },
+  { "id": "semantic-01", "kind": "semantic", "original": "Học sinh nhận phản hồi nhanh hơn nhờ hệ thống chấm bài tự động.", "candidate": "Công cụ tự động rút ngắn thời gian người học chờ kết quả đánh giá.", "positive": true },
+  { "id": "independent-01", "kind": "independent", "original": "Trí tuệ nhân tạo đang ngày càng đóng vai trò quan trọng trong giáo dục.", "candidate": "Mưa lớn làm mực nước sông dâng nhanh trong đêm.", "positive": false },
+  { "id": "quoted-01", "kind": "quoted", "original": "Giáo dục là vũ khí mạnh nhất để thay đổi thế giới.", "candidate": "\"Giáo dục là vũ khí mạnh nhất để thay đổi thế giới.\"", "positive": false },
+  { "id": "cited-01", "kind": "cited", "original": "AI có thể hỗ trợ phản hồi học tập.", "candidate": "Theo Nguyễn et al. (2025), AI có thể hỗ trợ phản hồi học tập.", "positive": false }
+]
