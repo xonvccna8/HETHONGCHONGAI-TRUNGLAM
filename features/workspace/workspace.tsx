@@ -123,12 +123,24 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
 
   async function uploadFile(file: File) {
     setMessage("");
+    if (file.size > 4 * 1024 * 1024) {
+      setMessage("Tệp vượt quá giới hạn 4 MB trên Vercel. Hãy chọn tệp nhỏ hơn.");
+      return;
+    }
     const form = new FormData(); form.set("file", file);
-    const response = await fetch("/api/upload", { method: "POST", body: form });
-    const body = await response.json();
-    if (!response.ok) { setMessage(body.error ?? "Không thể đọc tệp."); return; }
-    provenanceRef.current = createProvenance(true, body.text.length);
-    setText(body.text); setTitle(body.filename.replace(/\.[^.]+$/, "")); setView("edit"); setReport(undefined); setHumanRevision(undefined); setVersions([]); setDocumentId(undefined);
+    try {
+      const response = await fetch("/api/upload", { method: "POST", body: form });
+      const body = await response.json().catch(() => null) as { error?: string; filename?: string; text?: string } | null;
+      if (!response.ok) {
+        setMessage(body?.error ?? (response.status === 413 ? "Tệp quá lớn cho máy chủ. Hãy chọn tệp nhỏ hơn 4 MB." : `Máy chủ không tải được tệp (lỗi ${response.status}).`));
+        return;
+      }
+      if (!body?.text || !body.filename) { setMessage("Máy chủ không trả về nội dung tệp hợp lệ. Hãy thử lại."); return; }
+      provenanceRef.current = createProvenance(true, body.text.length);
+      setText(body.text); setTitle(body.filename.replace(/\.[^.]+$/, "")); setView("edit"); setReport(undefined); setHumanRevision(undefined); setVersions([]); setDocumentId(undefined);
+    } catch {
+      setMessage("Không kết nối được máy chủ tải tệp. Hãy kiểm tra mạng rồi thử lại.");
+    }
   }
 
   async function requestRewrite(mode: RewriteMode) {
