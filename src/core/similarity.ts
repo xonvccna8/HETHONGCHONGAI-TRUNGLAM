@@ -1,5 +1,5 @@
 import { extractCitations, isQuoted } from "./citation";
-import { lexicalTokens, normalizeText, parseDocument, stableId } from "./text";
+import { lexicalTokens, normalizeText, parseDocument, splitSentences, stableId } from "./text";
 import type { DiscoveredSource, ScanReport, SentenceAnalysis } from "./types";
 import { analyzeWritingSignals } from "./writing-signals";
 
@@ -25,6 +25,12 @@ export function jaccard(left: Set<string>, right: Set<string>): number {
   const intersection = [...left].filter((item) => right.has(item)).length;
   const union = new Set([...left, ...right]).size;
   return union ? intersection / union : 0;
+}
+
+export function containment(left: Set<string>, right: Set<string>): number {
+  if (!left.size || !right.size) return 0;
+  const intersection = [...left].filter((item) => right.has(item)).length;
+  return intersection / Math.min(left.size, right.size);
 }
 
 export function levenshtein(left: string, right: string): number {
@@ -73,12 +79,45 @@ export function tokenCosine(left: string, right: string): number {
   return na && nb ? dot / Math.sqrt(na * nb) : 0;
 }
 
+export function bestPassageWindow(needle: string, haystack: string): string {
+  const targetTokens = lexicalTokens(needle).length;
+  if (!haystack || haystack.length <= Math.max(320, needle.length * 2.2)) return haystack;
+  const sentences = splitSentences(haystack).slice(0, 300);
+  if (!sentences.length) return haystack.slice(0, Math.max(500, needle.length * 2));
+  let best = sentences[0].text;
+  let bestScore = -1;
+  for (let start = 0; start < sentences.length; start += 1) {
+    let passage = "";
+    for (let size = 1; size <= 4 && start + size <= sentences.length; size += 1) {
+      passage = `${passage} ${sentences[start + size - 1].text}`.trim();
+      const passageTokens = lexicalTokens(passage).length;
+      const score = tokenCosine(needle, passage) * 0.5
+        + containment(shingles(needle, 3), shingles(passage, 3)) * 0.5;
+      if (score > bestScore) {
+        bestScore = score;
+        best = passage;
+      }
+      if (passageTokens >= Math.max(12, targetTokens * 2.2)) break;
+    }
+  }
+  return best;
+}
+
 function comparePassages(left: string, right: string, semanticOverride?: number) {
-  const exact = jaccard(shingles(left), shingles(right));
+  const triLeft = shingles(left, 3);
+  const triRight = shingles(right, 3);
+  const fiveLeft = shingles(left, 5);
+  const fiveRight = shingles(right, 5);
+  const exact = Math.max(
+    jaccard(triLeft, triRight),
+    jaccard(fiveLeft, fiveRight),
+    containment(triLeft, triRight) * 0.92,
+    containment(fiveLeft, fiveRight) * 0.96,
+  );
   const fuzzy = fuzzySimilarity(left, right);
   const semantic = semanticOverride ?? tokenCosine(left, right);
   const lengthBalance = Math.min(left.length, right.length) / Math.max(left.length, right.length, 1);
-  const weighted = exact * 0.42 + fuzzy * 0.28 + semantic * 0.25 + lengthBalance * 0.05;
+  const weighted = exact * 0.4 + fuzzy * 0.25 + semantic * 0.3 + lengthBalance * 0.05;
   return { exact, fuzzy, semantic, weighted: Math.min(1, weighted) };
 }
 
@@ -91,14 +130,14 @@ function classify(text: string, scores: ReturnType<typeof comparePassages>, hasS
   }
   if (scores.exact >= 0.72 && scores.weighted >= 0.76) return { kind: "EXACT" as const, reason: "Chuỗi từ và cấu trúc câu trùng ở mức rất cao." };
   if (scores.fuzzy >= 0.62 && scores.weighted >= 0.58) return { kind: "HIGH_SIMILARITY" as const, reason: "Câu có thay đổi từ ngữ nhưng cấu trúc vẫn tương đồng rõ." };
+  if (hasSource && scores.semantic >= 0.82 && scores.fuzzy < 0.4) return { kind: "SEMANTIC_OVERLAP" as const, reason: "Có tương đồng ngữ nghĩa mạnh dù từ ngữ bề mặt khác biệt." };
   if (scores.semantic >= 0.68 && scores.weighted >= 0.48) return { kind: "SEMANTIC_OVERLAP" as const, reason: "Cách diễn đạt khác nhưng nội dung có độ tương đồng ngữ nghĩa cao." };
   if (hasSource && scores.weighted >= 0.38) return { kind: "POSSIBLE_MISSING_CITATION" as const, reason: "Có nguồn liên quan nhưng chưa thấy trích dẫn trong câu." };
   return { kind: "ORIGINAL" as const, reason: "Chưa phát hiện trùng lặp đáng kể trong phạm vi nguồn đã kiểm tra." };
 }
 
-export interface SemanticPairScores {
-  [key: string]: number;
-}
+export interface SemanticEvidence { score: number; passage?: string }
+export interface SemanticPairScores { [key: string]: number | SemanticEvidence }
 
 export function analyzeSimilarity(
   text: string,
@@ -115,14 +154,30 @@ export function analyzeSimilarity(
     let best: { scores: ReturnType<typeof comparePassages>; id?: string; text?: string; source?: DiscoveredSource } = {
       scores: { exact: 0, fuzzy: 0, semantic: 0, weighted: 0 },
     };
+    let matchedSourceCount = 0;
     for (const candidate of candidates) {
       if (candidate.id === sentence.id) continue;
-      const semantic = semanticScores[`${sentence.id}:${candidate.id}`];
-      const scores = comparePassages(sentence.text, candidate.text, semantic);
-      if (scores.weighted > best.scores.weighted) best = { scores, id: candidate.id, text: candidate.text, source: candidate.source };
+      const lexicalPassage = candidate.source ? bestPassageWindow(sentence.text, candidate.text) : candidate.text;
+      const semanticEvidence = semanticScores[`${sentence.id}:${candidate.id}`];
+      const semanticScore = typeof semanticEvidence === "number" ? semanticEvidence : semanticEvidence?.score;
+      const semanticPassage = typeof semanticEvidence === "object" ? semanticEvidence.passage : undefined;
+      const lexicalScores = comparePassages(sentence.text, lexicalPassage, semanticScore);
+      const semanticScoresForPassage = semanticPassage
+        ? comparePassages(sentence.text, semanticPassage, semanticScore)
+        : lexicalScores;
+      const scores = semanticScoresForPassage.weighted >= lexicalScores.weighted ? semanticScoresForPassage : lexicalScores;
+      const passage = semanticScoresForPassage.weighted >= lexicalScores.weighted ? semanticPassage ?? lexicalPassage : lexicalPassage;
+      if (candidate.source && scores.weighted >= 0.38) matchedSourceCount += 1;
+      if (scores.weighted > best.scores.weighted) best = { scores, id: candidate.id, text: passage, source: candidate.source };
     }
     const classification = classify(sentence.text, best.scores, Boolean(best.source));
     const similarity = Math.round(best.scores.weighted * 100);
+    const crossLanguageLikely = Boolean(best.source && best.scores.semantic >= 0.74 && best.scores.exact < 0.16 && best.scores.fuzzy < 0.35);
+    const evidenceLevel = best.source && (best.scores.weighted >= 0.65 || best.scores.exact >= 0.75)
+      ? "strong"
+      : best.source && (best.scores.weighted >= 0.43 || best.scores.semantic >= 0.72)
+        ? "moderate"
+        : "weak";
     return {
       sentenceId: sentence.id,
       text: sentence.text,
@@ -134,7 +189,9 @@ export function analyzeSimilarity(
       sourceId: best.source?.id,
       sourceText: best.text,
       internalMatchSentenceId: best.source ? undefined : best.id,
-      reason: classification.reason,
+      reason: crossLanguageLikely
+        ? "Phát hiện tương đồng ngữ nghĩa mạnh với nguồn khác ngôn ngữ; cần kiểm chứng bản dịch hoặc cách diễn đạt lại."
+        : classification.reason,
       suggestedAction:
         classification.kind === "CITED" || classification.kind === "QUOTED"
           ? "Kiểm tra định dạng và giữ nguyên nguồn."
@@ -142,6 +199,9 @@ export function analyzeSimilarity(
             ? "Tái cấu trúc lập luận, bổ sung phân tích riêng và dẫn nguồn khi cần."
             : "Không cần thay đổi bắt buộc.",
       citationProtected: extractCitations(sentence.text).length > 0,
+      evidenceLevel,
+      matchedSourceCount,
+      crossLanguageLikely,
     };
   });
 

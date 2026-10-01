@@ -76,6 +76,15 @@ export interface DiscoveredSource {
   snippet: string;
   retrievedAt: string;
   verified: boolean;
+  matchedQueries?: string[];
+  retrievalStrategies?: Array<"exact" | "paraphrase" | "cross-language" | "keyword">;
+}
+
+export interface SimilarityVerification {
+  relation: "exact" | "paraphrase" | "translation" | "shared-topic" | "unrelated" | "inconclusive";
+  confidence: number;
+  reason: string;
+  model: string;
 }
 
 export interface SentenceAnalysis {
@@ -92,6 +101,10 @@ export interface SentenceAnalysis {
   suggestedAction: string;
   citationProtected: boolean;
   internalMatchSentenceId?: string;
+  evidenceLevel?: "strong" | "moderate" | "weak";
+  matchedSourceCount?: number;
+  crossLanguageLikely?: boolean;
+  verification?: SimilarityVerification;
 }
 
 export interface AiWritingSignals {
@@ -157,6 +170,16 @@ export interface ScanReport {
   sources: Array<DiscoveredSource & { contribution: number }>;
   aiWriting: AiWritingSignals;
   council?: CouncilReview;
+  similarityEngine?: {
+    version: "evidence-graph-v2";
+    queryCount: number;
+    searchStrategies: string[];
+    candidatesRetrieved: number;
+    sourcesVerified: number;
+    passagesCompared: number;
+    semanticEnabled: boolean;
+    aiVerificationEnabled: boolean;
+  };
   limitations: string[];
 }
 

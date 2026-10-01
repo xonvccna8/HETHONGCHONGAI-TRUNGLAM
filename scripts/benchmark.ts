@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
-import { fuzzySimilarity, jaccard, shingles, tokenCosine } from "../src/core/similarity";
+import { analyzeSimilarity } from "../src/core/similarity";
 
 interface Example { id: string; kind: string; original: string; candidate: string; positive: boolean }
 
@@ -9,11 +9,17 @@ async function main() {
   let tp = 0; let fp = 0; let fn = 0; let tn = 0;
   const started = performance.now();
   for (const example of dataset) {
-    const exact = jaccard(shingles(example.original), shingles(example.candidate));
-    const fuzzy = fuzzySimilarity(example.original, example.candidate);
-    const semanticProxy = tokenCosine(example.original, example.candidate);
-    const score = exact * 0.44 + fuzzy * 0.31 + semanticProxy * 0.25;
-    const predicted = score >= 0.48;
+    const report = analyzeSimilarity(example.candidate, [{
+      id: `benchmark-${example.id}`,
+      title: "Benchmark source",
+      url: `https://benchmark.invalid/${example.id}`,
+      domain: "benchmark.invalid",
+      snippet: example.original,
+      retrievedAt: new Date(0).toISOString(),
+      verified: true,
+    }]);
+    const predicted = ["EXACT", "HIGH_SIMILARITY", "SEMANTIC_OVERLAP", "POSSIBLE_MISSING_CITATION"]
+      .includes(report.sentences[0]?.kind);
     if (predicted && example.positive) tp += 1;
     else if (predicted) fp += 1;
     else if (example.positive) fn += 1;
@@ -24,7 +30,7 @@ async function main() {
   const recall = tp / Math.max(tp + fn, 1);
   const f1 = 2 * precision * recall / Math.max(precision + recall, Number.EPSILON);
   const falsePositiveRate = fp / Math.max(fp + tn, 1);
-  console.log(JSON.stringify({ samples: dataset.length, precision, recall, f1, falsePositiveRate, latencyMs: latency }, null, 2));
+  console.log(JSON.stringify({ samples: dataset.length, truePositive: tp, falsePositive: fp, falseNegative: fn, trueNegative: tn, precision, recall, f1, falsePositiveRate, latencyMs: latency }, null, 2));
 }
 
 void main();

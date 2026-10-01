@@ -7,9 +7,10 @@ ORIGIN AI là workspace kiểm tra trùng lặp, truy tìm nguồn và hỗ tr�
 - Landing page, đăng nhập và workspace responsive, light/dark mode.
 - Dán văn bản hoặc đọc DOCX, PDF, TXT, MD (tối đa 10 MB).
 - Parser theo section → paragraph → sentence với ID và fingerprint ổn định.
-- Pipeline exact shingles/Jaccard, fuzzy Levenshtein/token overlap, semantic embeddings/cosine và weighted scoring.
+- Evidence Graph v2 kết hợp multi-resolution shingles/containment, fuzzy alignment, semantic embeddings/cosine và weighted scoring trên từng đoạn nguồn cục bộ.
 - Phân loại exact, high similarity, semantic overlap, common knowledge, quote, cited và missing citation.
-- Source Map với adapter OpenAI Web Search, Tavily hoặc Serper; chỉ dùng URL xuất hiện trong retrieval thật.
+- Source Map với multi-query planner (exact, keyword, paraphrase, dịch chéo ngôn ngữ) và adapter OpenAI Web Search, Tavily hoặc Serper; chỉ dùng URL xuất hiện trong retrieval thật.
+- GPT‑6 Astra kiểm chứng từng cặp đoạn đáng ngờ thành exact, paraphrase, translation, shared-topic, unrelated hoặc inconclusive; điểm máy xác định vẫn được giữ riêng để tránh AI tự xác nhận chính nó.
 - AI Council gồm sáu chuyên gia song song và một Quality Reviewer, có phản biện chéo, lưu disagreement và model routing theo vai trò.
 - Sentence-level review, exact/fuzzy/semantic score và giải thích.
 - Originality Rewrite Agent với bốn chế độ, Responses API Structured Outputs và fallback cục bộ khi chưa có khóa.
@@ -68,6 +69,9 @@ Sao chép `.env.example`; không commit `.env`.
 - `REDIS_URL`: queue, progress và cache; nếu bỏ trống scan chạy inline.
 - `SEARCH_PROVIDER`: `openai`, `tavily`, `serper` hoặc `none`.
 - `SEARCH_API_KEY`: khóa Tavily/Serper (OpenAI dùng `OPENAI_API_KEY`).
+- `AI_SEARCH_QUERY_PLANNER_ENABLED`: tạo thêm truy vấn paraphrase và chéo ngôn ngữ bằng model nhanh.
+- `AI_SIMILARITY_VERIFIER_ENABLED`, `AI_SIMILARITY_VERIFIER_MODEL`: bật bộ kiểm chứng quan hệ giữa đoạn tài liệu và đoạn nguồn.
+- `SOURCE_DISCOVERY_MAX_QUERIES`, `SOURCE_DISCOVERY_MAX_SOURCES`: giới hạn bề rộng truy tìm nguồn và chi phí.
 - `S3_*`: cấu hình object storage S3-compatible cho production.
 - `AUTH_SECRET`: khóa ký cookie; bắt buộc phải là chuỗi dài ngẫu nhiên ở production.
 - `DEMO_LOGIN_EMAIL`, `DEMO_LOGIN_PASSWORD`: tài khoản local; thay bằng SSO/OIDC khi production.
