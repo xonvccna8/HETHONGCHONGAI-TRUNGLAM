@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import mammoth from "mammoth";
-import { PDFParse } from "pdf-parse";
 import { getSession } from "@/src/auth/session";
 
 export const runtime = "nodejs";
@@ -26,8 +24,10 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let text = "";
     if (/\.docx$/i.test(file.name) || file.type.includes("wordprocessingml")) {
+      const { default: mammoth } = await import("mammoth");
       text = (await mammoth.extractRawText({ buffer })).value;
     } else if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+      const { PDFParse } = await import("pdf-parse");
       const parser = new PDFParse({ data: buffer });
       try {
         text = (await parser.getText()).text;
