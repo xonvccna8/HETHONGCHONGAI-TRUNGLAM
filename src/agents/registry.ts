@@ -8,7 +8,7 @@ export interface AgentDefinition {
   maxFindings: number;
 }
 
-const fastModel = () => process.env.OPENAI_FAST_MODEL ?? "gpt-6-luna";
+const fastModel = () => process.env.OPENAI_FAST_MODEL ?? "gpt-6.1-sol";
 const reasoningModel = () => process.env.OPENAI_REASONING_MODEL ?? "gpt-6-astra";
 
 export function getCouncilAgents(): AgentDefinition[] {

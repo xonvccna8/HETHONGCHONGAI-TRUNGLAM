@@ -90,6 +90,7 @@ async function callSpecialist(client: OpenAI, definition: AgentDefinition, pack:
   try {
     const response = await client.responses.create({
       model: definition.model,
+      store: false,
       instructions: [
         `You are the ORIGIN AI ${definition.name}.`,
         definition.objective,
@@ -147,6 +148,7 @@ export async function runAiCouncil(text: string, report: ScanReport): Promise<Co
   try {
     const response = await client.responses.create({
       model: quality.model,
+      store: false,
       reasoning: { effort: "high" },
       instructions: [
         `You are the ORIGIN AI ${quality.name}.`,

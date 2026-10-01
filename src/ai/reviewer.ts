@@ -53,6 +53,7 @@ export async function rewritePassage(input: { text: string; context?: string; mo
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const response = await client.responses.create({
       model: process.env.OPENAI_REASONING_MODEL ?? "gpt-6-astra",
+      store: false,
       reasoning: { effort: "high" },
       instructions: [
         "You are the ORIGIN AI Originality Editor.",
