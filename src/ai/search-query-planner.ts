@@ -57,7 +57,7 @@ export async function planSearchQueries(text: string): Promise<PlannedSearchQuer
     .slice(0, 6)
     .map((sentence) => sentence.text);
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000 });
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 0 });
     const response = await client.responses.create({
       model: process.env.OPENAI_FAST_MODEL ?? "gpt-6.1-sol",
       store: false,

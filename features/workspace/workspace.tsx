@@ -99,10 +99,21 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     try {
       const provenance = { ...provenanceRef.current, durationMs: Math.max(0, Date.now() - Date.parse(provenanceRef.current.sessionStartedAt)), revisionCount: versions.length };
       const response = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ text: content, title, documentId, ephemeral, provenance }) });
-      const body = await response.json();
+      const responseText = await response.text();
+      let body: { error?: string; queued?: boolean; jobId?: string; documentId?: string; report?: ScanReport };
+      try {
+        body = JSON.parse(responseText);
+      } catch {
+        const error = response.status === 504
+          ? "Máy chủ mất quá nhiều thời gian để kiểm tra tài liệu này. Hãy thử lại; nếu tài liệu dài, chia nhỏ tài liệu rồi quét từng phần."
+          : `Máy chủ trả về lỗi ${response.status} khi kiểm tra tài liệu.`;
+        throw new Error(error);
+      }
       if (!response.ok) throw new Error(body.error ?? "Không thể quét tài liệu.");
       if (body.documentId) setDocumentId(body.documentId);
-      const nextReport = body.queued ? await pollJob(body.jobId, controller.signal) : body.report as ScanReport;
+      const nextReport = body.queued
+        ? body.jobId ? await pollJob(body.jobId, controller.signal) : (() => { throw new Error("Máy chủ chưa tạo được tác vụ quét."); })()
+        : body.report as ScanReport;
       updateProgress(100, "Hoàn tất");
       setReport(nextReport);
       setSelected(nextReport.sentences.find((item) => item.kind !== "ORIGINAL") ?? nextReport.sentences[0]);

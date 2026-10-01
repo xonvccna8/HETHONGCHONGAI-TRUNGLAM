@@ -150,7 +150,7 @@ async function openAiObservation(local: AiWritingSignals, segments: SegmentInput
   }
   const model = process.env.AI_AUTHORSHIP_REVIEW_MODEL ?? process.env.OPENAI_REASONING_MODEL ?? "gpt-6-astra";
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 45_000 });
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 45_000, maxRetries: 0 });
     const response = await client.responses.create({
       model,
       store: false,
