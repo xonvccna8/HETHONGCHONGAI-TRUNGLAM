@@ -41,7 +41,7 @@ function collectUrlRecords(value: unknown, records: Array<{ url: string; title?:
 }
 
 class OpenAIWebSearchProvider implements SearchProvider {
-  private client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  private client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 0 });
 
   async search(query: string, limit = 5): Promise<DiscoveredSource[]> {
     return this.searchMany([{ query, strategy: "exact" }], limit);

@@ -14,8 +14,10 @@ export function cosineSimilarity(left: number[], right: number[]): number {
 }
 
 export async function embedTexts(texts: string[]): Promise<number[][] | null> {
-  if (!process.env.OPENAI_API_KEY || !texts.length) return null;
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  // Embeddings are an enhancement. Keep large documents on the deterministic
+  // path instead of sending an oversized request or blocking a Vercel function.
+  if (!process.env.OPENAI_API_KEY || !texts.length || texts.length > 512) return null;
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 0 });
   const response = await client.embeddings.create({
     model: process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-large",
     input: texts,

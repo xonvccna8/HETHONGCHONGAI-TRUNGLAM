@@ -151,7 +151,7 @@ export async function runAiCouncil(text: string, report: ScanReport): Promise<Co
     || report.aiWriting.risk === "medium"
     || report.aiWriting.risk === "high";
   if (trigger !== "always" && !needsDeepReview) return undefined;
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 0 });
   const pack = evidencePack(text, report);
   const limit = Math.max(1, Math.min(4, Number(process.env.AI_COUNCIL_MAX_CONCURRENCY ?? 3)));
   const specialists = await runWithConcurrency(getCouncilAgents(), limit, (definition) => callSpecialist(client, definition, pack));

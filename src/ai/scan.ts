@@ -35,15 +35,20 @@ export async function runScan(text: string, options: { provenance?: WritingProve
   const authorshipPromise = runAuthorshipEnsemble(text, analyzeWritingSignals(text), options.provenance);
   const discovery = await discoverSourcesDetailed(text);
   const parsed = parseDocument(text);
-  const sourcePassages = buildSourcePassages(discovery.sources);
+  const sourcePassages = buildSourcePassages(discovery.sources).slice(0, 120);
   const sentenceTexts = parsed.sentences.map((sentence) => sentence.text);
   const allTexts = [...sentenceTexts, ...sourcePassages.map((passage) => passage.text)];
   const embeddings = await embedTexts(allTexts).catch(() => null);
   const semantic: SemanticPairScores = {};
   if (embeddings) {
     const sentenceCount = parsed.sentences.length;
+    const neighborWindow = sentenceCount > 200 ? 12 : sentenceCount;
     for (let left = 0; left < sentenceCount; left += 1) {
-      for (let right = 0; right < sentenceCount; right += 1) {
+      // Internal comparisons are useful for detecting repeated passages, but
+      // an all-to-all matrix grows quadratically and can freeze large scans.
+      const firstNeighbor = Math.max(0, left - neighborWindow);
+      const lastNeighbor = Math.min(sentenceCount - 1, left + neighborWindow);
+      for (let right = firstNeighbor; right <= lastNeighbor; right += 1) {
         if (left === right) continue;
         semantic[`${parsed.sentences[left].id}:${parsed.sentences[right].id}`] = cosineSimilarity(embeddings[left], embeddings[right]);
       }

@@ -150,12 +150,18 @@ export function analyzeSimilarity(
     ...parsed.sentences.map((sentence) => ({ id: sentence.id, text: sentence.text, source: undefined })),
   ];
 
-  const sentences: SentenceAnalysis[] = parsed.sentences.map((sentence) => {
+  const sourceCandidates = candidates.filter((candidate) => candidate.source);
+  const neighborWindow = parsed.sentences.length > 200 ? 12 : parsed.sentences.length;
+  const sentences: SentenceAnalysis[] = parsed.sentences.map((sentence, sentenceIndex) => {
     let best: { scores: ReturnType<typeof comparePassages>; id?: string; text?: string; source?: DiscoveredSource } = {
       scores: { exact: 0, fuzzy: 0, semantic: 0, weighted: 0 },
     };
     let matchedSourceCount = 0;
-    for (const candidate of candidates) {
+    const firstNeighbor = Math.max(0, sentenceIndex - neighborWindow);
+    const lastNeighbor = Math.min(parsed.sentences.length - 1, sentenceIndex + neighborWindow);
+    const internalCandidates = parsed.sentences.slice(firstNeighbor, lastNeighbor + 1)
+      .map((item) => ({ id: item.id, text: item.text, source: undefined }));
+    for (const candidate of [...sourceCandidates, ...internalCandidates]) {
       if (candidate.id === sentence.id) continue;
       const lexicalPassage = candidate.source ? bestPassageWindow(sentence.text, candidate.text) : candidate.text;
       const semanticEvidence = semanticScores[`${sentence.id}:${candidate.id}`];
