@@ -393,9 +393,10 @@ function ensemble(local: AiWritingSignals, observations: Observation[], provenan
   };
 }
 
-export async function runAuthorshipEnsemble(text: string, local: AiWritingSignals, provenance?: WritingProvenance): Promise<AiWritingSignals> {
+export async function runAuthorshipEnsemble(text: string, local: AiWritingSignals, provenance?: WritingProvenance, externalDetectors = true): Promise<AiWritingSignals> {
   const segmentInputs = buildAuthorshipSegments(text);
   const localSegments = localSegmentObservations(segmentInputs);
+  if (!externalDetectors) return ensemble(local, [stylometryObservation(local)], provenance, text.length, localSegments);
   const observations = await Promise.all([
     Promise.resolve(stylometryObservation(local)),
     openAiObservation(local, segmentInputs),

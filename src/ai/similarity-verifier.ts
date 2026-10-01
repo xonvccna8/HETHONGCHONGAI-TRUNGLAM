@@ -39,6 +39,7 @@ export async function verifySimilarityMatches(report: ScanReport): Promise<{ rep
   if (!process.env.OPENAI_API_KEY || process.env.AI_SIMILARITY_VERIFIER_ENABLED === "false") {
     return { report, ran: false };
   }
+  if (report.sentences.length > 300) return { report, ran: false };
   const candidates = report.sentences
     .filter((item) => item.sourceId && item.sourceText && item.similarity >= 30)
     .sort((left, right) => right.similarity - left.similarity)

@@ -32,9 +32,10 @@ export function buildSourcePassages(sources: DiscoveredSource[]): SourcePassage[
 }
 
 export async function runScan(text: string, options: { provenance?: WritingProvenance } = {}) {
-  const authorshipPromise = runAuthorshipEnsemble(text, analyzeWritingSignals(text), options.provenance);
-  const discovery = await discoverSourcesDetailed(text);
   const parsed = parseDocument(text);
+  const largeDocument = text.length > 50_000 || parsed.sentences.length > 300;
+  const authorshipPromise = runAuthorshipEnsemble(text, analyzeWritingSignals(text), options.provenance, !largeDocument);
+  const discovery = await discoverSourcesDetailed(text);
   const sourcePassages = buildSourcePassages(discovery.sources).slice(0, 120);
   const sentenceTexts = parsed.sentences.map((sentence) => sentence.text);
   const allTexts = [...sentenceTexts, ...sourcePassages.map((passage) => passage.text)];
@@ -66,7 +67,7 @@ export async function runScan(text: string, options: { provenance?: WritingProve
     ...analyzeSimilarity(text, discovery.sources, semantic),
     aiWriting: await authorshipPromise,
   };
-  const verified = await verifySimilarityMatches(baseReport);
+  const verified = largeDocument ? { report: baseReport, ran: false } : await verifySimilarityMatches(baseReport);
   const report = {
     ...verified.report,
     similarityEngine: {
@@ -80,6 +81,9 @@ export async function runScan(text: string, options: { provenance?: WritingProve
       aiVerificationEnabled: verified.ran,
     },
   };
-  const council = await runAiCouncil(text, report);
-  return council ? { ...report, council } : report;
+  const council = largeDocument ? undefined : await runAiCouncil(text, report);
+  if (council) return { ...report, council };
+  return largeDocument
+    ? { ...report, limitations: [...report.limitations, "Tài liệu dài: đã ưu tiên hoàn tất kiểm tra cấu trúc, trùng lặp và nguồn; các bộ AI chuyên sâu được bỏ qua để tránh quá thời gian xử lý."] }
+    : report;
 }

@@ -66,35 +66,50 @@ type SpecialistResult = { definition: AgentDefinition; findings: CouncilFinding[
 
 function evidencePack(text: string, report: ScanReport) {
   return JSON.stringify({
-    documentContent: text,
+    // Keep each reviewer request small. Sending the entire document and every
+    // analyzed sentence multiplied token use by the number of council agents.
+    documentExcerpt: text.length <= 6_000 ? text : `${text.slice(0, 4_000)}\n[…đã rút gọn…]\n${text.slice(-2_000)}`,
     deterministicMetrics: report.metrics,
-    sentenceAnalysis: report.sentences.map((item) => ({
+    sentenceAnalysis: report.sentences
+      .filter((item) => item.sourceId || item.similarity >= 25 || item.kind !== "ORIGINAL")
+      .sort((left, right) => right.similarity - left.similarity)
+      .slice(0, 32)
+      .map((item) => ({
       sentenceId: item.sentenceId,
-      text: item.text,
+      text: item.text.slice(0, 360),
       kind: item.kind,
       similarity: item.similarity,
       exactScore: item.exactScore,
       fuzzyScore: item.fuzzyScore,
       semanticScore: item.semanticScore,
       sourceId: item.sourceId,
-      sourceText: item.sourceText,
+      sourceText: item.sourceText?.slice(0, 500),
       citationProtected: item.citationProtected,
       evidenceLevel: item.evidenceLevel,
       matchedSourceCount: item.matchedSourceCount,
       crossLanguageLikely: item.crossLanguageLikely,
       verification: item.verification,
-      reason: item.reason,
+      reason: item.reason.slice(0, 240),
     })),
-    retrievedSources: report.sources.map((source) => ({
+    retrievedSources: report.sources.slice(0, 8).map((source) => ({
       id: source.id,
-      title: source.title,
-      url: source.url,
+      title: source.title.slice(0, 180),
+      url: source.url.slice(0, 300),
       contribution: source.contribution,
       verified: source.verified,
-      retrievalStrategies: source.retrievalStrategies,
+      retrievalStrategies: source.retrievalStrategies?.slice(0, 3) ?? [],
+      snippet: source.snippet.slice(0, 700),
     })),
     similarityEngine: report.similarityEngine,
-    writingSignals: report.aiWriting,
+    writingSignals: {
+      risk: report.aiWriting.risk,
+      score: report.aiWriting.score,
+      confidence: report.aiWriting.confidence,
+      label: report.aiWriting.label,
+      method: report.aiWriting.method,
+      signals: report.aiWriting.signals.slice(0, 8),
+      detectors: report.aiWriting.detectors?.map(({ id, status, score, confidence, label }) => ({ id, status, score, confidence, label })),
+    },
   });
 }
 
@@ -153,8 +168,8 @@ export async function runAiCouncil(text: string, report: ScanReport): Promise<Co
   if (trigger !== "always" && !needsDeepReview) return undefined;
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 0 });
   const pack = evidencePack(text, report);
-  const limit = Math.max(1, Math.min(4, Number(process.env.AI_COUNCIL_MAX_CONCURRENCY ?? 3)));
-  const specialists = await runWithConcurrency(getCouncilAgents(), limit, (definition) => callSpecialist(client, definition, pack));
+  const limit = Math.max(1, Math.min(3, Number(process.env.AI_COUNCIL_MAX_CONCURRENCY ?? 2)));
+  const specialists = await runWithConcurrency(getCouncilAgents().slice(0, 4), limit, (definition) => callSpecialist(client, definition, pack));
   const quality = getQualityReviewer();
   const qualityStarted = performance.now();
   const completedFindings = specialists.flatMap((result) => result.findings);

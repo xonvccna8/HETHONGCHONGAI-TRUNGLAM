@@ -91,10 +91,13 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     const controller = new AbortController();
     abortRef.current = controller;
     setScanning(true); setMessage(""); setProgress(6); setStage("Đang đọc tài liệu…"); setRewrite(undefined); setHumanRevision(undefined);
+    const scanStartedAt = Date.now();
     const stages = [[18,"Đang chia cấu trúc…"],[34,"Đang phân tích trùng lặp…"],[48,"Đang tìm nguồn…"],[63,"Đang phân tích ngữ nghĩa…"]] as const;
     let stageIndex = 0;
     const timer = window.setInterval(() => {
       if (stageIndex < stages.length) { updateProgress(stages[stageIndex][0], stages[stageIndex][1]); stageIndex += 1; }
+      else if (Date.now() - scanStartedAt > 90_000) updateProgress(63, "Đang tổng hợp kết quả cho tài liệu dài…");
+      else if (Date.now() - scanStartedAt > 20_000) updateProgress(63, "Đang chờ dịch vụ AI phản hồi…");
     }, 520);
     try {
       const provenance = { ...provenanceRef.current, durationMs: Math.max(0, Date.now() - Date.parse(provenanceRef.current.sessionStartedAt)), revisionCount: versions.length };

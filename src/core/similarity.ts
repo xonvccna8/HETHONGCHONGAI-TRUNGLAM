@@ -82,7 +82,7 @@ export function tokenCosine(left: string, right: string): number {
 export function bestPassageWindow(needle: string, haystack: string): string {
   const targetTokens = lexicalTokens(needle).length;
   if (!haystack || haystack.length <= Math.max(320, needle.length * 2.2)) return haystack;
-  const sentences = splitSentences(haystack).slice(0, 300);
+  const sentences = splitSentences(haystack).slice(0, 80);
   if (!sentences.length) return haystack.slice(0, Math.max(500, needle.length * 2));
   let best = sentences[0].text;
   let bestScore = -1;
