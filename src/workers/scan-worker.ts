@@ -11,7 +11,7 @@ const worker = new Worker<ScanJobData>(
     await job.updateProgress({ percent: 12, stage: "Đang đọc tài liệu…" });
     await job.updateProgress({ percent: 28, stage: "Đang chia cấu trúc…" });
     await job.updateProgress({ percent: 44, stage: "Đang phân tích trùng lặp…" });
-    const report = await runScan(job.data.text);
+    const report = await runScan(job.data.text, { provenance: job.data.provenance });
     await job.updateProgress({ percent: 78, stage: "Đang kiểm tra citation…" });
     await job.updateProgress({ percent: 94, stage: "Đang tạo báo cáo…" });
     return report;

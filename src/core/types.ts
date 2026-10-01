@@ -14,6 +14,31 @@ export type RiskLevel = "very-low" | "low" | "medium" | "high";
 export type AuthorshipLabel = "human" | "mixed" | "ai" | "inconclusive";
 export type DetectorStatus = "completed" | "unavailable" | "skipped" | "failed";
 
+export interface WritingProvenance {
+  sessionStartedAt: string;
+  durationMs: number;
+  inputCharacters: number;
+  pastedCharacters: number;
+  importedCharacters: number;
+  aiAssistedCharacters: number;
+  pasteEvents: number;
+  editEvents: number;
+  revisionCount: number;
+  imported: boolean;
+}
+
+export interface AuthorshipSegment {
+  id: string;
+  start: number;
+  end: number;
+  text: string;
+  label: AuthorshipLabel;
+  score: number;
+  confidence: number;
+  reason: string;
+  detector: string;
+}
+
 export interface ParsedSentence {
   id: string;
   text: string;
@@ -76,10 +101,29 @@ export interface AiWritingSignals {
   label?: AuthorshipLabel;
   flaggedShare?: number;
   method?: "stylometry" | "multi-detector-ensemble";
+  agreement?: {
+    score: number;
+    status: "strong" | "moderate" | "weak";
+    completedDetectors: number;
+    message: string;
+  };
+  provenance?: {
+    status: "available" | "partial" | "unavailable";
+    evidenceStrength: number;
+    typedShare: number;
+    pastedShare: number;
+    importedShare: number;
+    aiAssistedShare: number;
+    durationMinutes: number;
+    editEvents: number;
+    revisionCount: number;
+    summary: string;
+  };
+  segments?: AuthorshipSegment[];
   disclaimer: string;
   signals: Array<{ label: string; score: number; detail: string }>;
   detectors?: Array<{
-    id: "stylometry" | "openai-reviewer" | "copyleaks" | "faid";
+    id: "stylometry" | "openai-reviewer" | "copyleaks" | "faid" | "vietaidetector";
     name: string;
     status: DetectorStatus;
     score?: number;

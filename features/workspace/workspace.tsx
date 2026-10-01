@@ -7,11 +7,11 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { AnalysisViewer } from "./analysis-viewer";
 import { AssistantPanel } from "./assistant-panel";
 import { CompareView, type RevisionVersion } from "./compare-view";
-import { EditorPane } from "./editor-pane";
+import { EditorPane, type EditorActivity } from "./editor-pane";
 import { MetricCards } from "./metric-cards";
 import { ProgressOverlay } from "./progress-overlay";
 import type { SessionUser } from "@/src/auth/session";
-import type { RewriteMode, RewriteResult, ScanReport, SentenceAnalysis } from "@/src/core/types";
+import type { RewriteMode, RewriteResult, ScanReport, SentenceAnalysis, WritingProvenance } from "@/src/core/types";
 
 const sample = `Trí tuệ nhân tạo đang ngày càng đóng vai trò quan trọng trong giáo dục. Các hệ thống học tập thích ứng có thể phân tích tiến độ của người học và điều chỉnh nội dung phù hợp với nhu cầu cá nhân.
 
@@ -20,6 +20,10 @@ Tuy nhiên, việc sử dụng AI trong nhà trường cũng đặt ra những c
 Trí tuệ nhân tạo đang ngày càng đóng vai trò quan trọng trong giáo dục. Vì vậy, các cơ sở đào tạo cần xây dựng quy trình đánh giá công cụ dựa trên bằng chứng thay vì chạy theo xu hướng.`;
 
 type MainView = "edit" | "review" | "compare";
+
+function createProvenance(imported = false, importedCharacters = 0): WritingProvenance {
+  return { sessionStartedAt: new Date().toISOString(), durationMs: 0, inputCharacters: 0, pastedCharacters: 0, importedCharacters, aiAssistedCharacters: 0, pasteEvents: 0, editEvents: 0, revisionCount: 0, imported };
+}
 
 export function Workspace({ user, startWithSample }: { user: SessionUser; startWithSample: boolean }) {
   const initialText = startWithSample ? sample : "";
@@ -41,11 +45,23 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
   const [versions, setVersions] = useState<RevisionVersion[]>(initialText ? [{ id: "initial", label: "Original", text: initialText, createdAt: new Date(0).toISOString() }] : []);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const provenanceRef = useRef<WritingProvenance>(createProvenance(startWithSample, initialText.length));
   const originalText = versions[0]?.text ?? text;
 
   const updateProgress = useCallback((percent: number, label?: string) => {
     setProgress(percent);
     if (label) setStage(label);
+  }, []);
+
+  const recordActivity = useCallback((activity: EditorActivity) => {
+    const current = provenanceRef.current;
+    provenanceRef.current = {
+      ...current,
+      inputCharacters: current.inputCharacters + activity.inputCharacters,
+      pastedCharacters: current.pastedCharacters + activity.pastedCharacters,
+      pasteEvents: current.pasteEvents + activity.pasteEvents,
+      editEvents: current.editEvents + activity.editEvents,
+    };
   }, []);
 
   const pollJob = useCallback((jobId: string, signal: AbortSignal): Promise<ScanReport> => {
@@ -75,7 +91,8 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
       if (stageIndex < stages.length) { updateProgress(stages[stageIndex][0], stages[stageIndex][1]); stageIndex += 1; }
     }, 520);
     try {
-      const response = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ text: content, title, documentId, ephemeral }) });
+      const provenance = { ...provenanceRef.current, durationMs: Math.max(0, Date.now() - Date.parse(provenanceRef.current.sessionStartedAt)), revisionCount: versions.length };
+      const response = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ text: content, title, documentId, ephemeral, provenance }) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Không thể quét tài liệu.");
       if (body.documentId) setDocumentId(body.documentId);
@@ -104,6 +121,7 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     const response = await fetch("/api/upload", { method: "POST", body: form });
     const body = await response.json();
     if (!response.ok) { setMessage(body.error ?? "Không thể đọc tệp."); return; }
+    provenanceRef.current = createProvenance(true, body.text.length);
     setText(body.text); setTitle(body.filename.replace(/\.[^.]+$/, "")); setView("edit"); setReport(undefined); setVersions([]); setDocumentId(undefined);
   }
 
@@ -124,6 +142,7 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     const revised = text.replace(selected.text, rewrite.rewrittenText);
     if (revised === text) { setMessage("Không tìm thấy câu gốc trong phiên bản hiện tại."); return; }
     const version: RevisionVersion = { id: crypto.randomUUID(), label: `Revision ${Math.max(1, versions.length)}`, text: revised, createdAt: new Date().toISOString() };
+    provenanceRef.current = { ...provenanceRef.current, aiAssistedCharacters: provenanceRef.current.aiAssistedCharacters + rewrite.rewrittenText.length };
     setText(revised); setVersions((items) => [...items, version]); setNeedsRescan(true); setView("compare"); setRewrite(undefined);
   }
 
@@ -132,6 +151,7 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
   }
 
   function newDocument() {
+    provenanceRef.current = createProvenance();
     setText(""); setTitle("Tài liệu chưa đặt tên"); setReport(undefined); setSelected(undefined); setRewrite(undefined); setVersions([]); setDocumentId(undefined); setNeedsRescan(false); setView("edit");
   }
 
@@ -139,7 +159,9 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     if (!report) return;
     const rows = report.sentences.map((item) => `<tr><td>${escapeHtml(item.text)}</td><td>${item.kind}</td><td>${item.similarity}%</td><td>${escapeHtml(item.reason)}</td></tr>`).join("");
     const detectors = report.aiWriting.detectors?.map((item) => `<li>${escapeHtml(item.name)}: <b>${item.score !== undefined ? `${item.score}%` : item.status}</b></li>`).join("") ?? "";
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>ORIGIN AI Report</title><style>body{font-family:Arial;line-height:1.6;margin:40px;color:#15242d}h1{color:#0b776f}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccd8dc;padding:8px;text-align:left}</style></head><body><h1>ORIGIN AI — Originality Report</h1><h2>${escapeHtml(title)}</h2><p>Nguyên bản: <b>${report.metrics.originality}%</b> · Tương đồng: <b>${report.metrics.similarity}%</b> · Nguồn: <b>${report.metrics.sourcesFound}</b></p><h3>Chỉ báo AI tổng hợp</h3><p><b>${report.aiWriting.score}%</b> · Độ tin cậy ${report.aiWriting.confidence ?? "—"}%</p><ul>${detectors}</ul><p>${escapeHtml(report.aiWriting.disclaimer)}</p><h3>Matched passages</h3><table><tr><th>Câu</th><th>Phân loại</th><th>Similarity</th><th>Giải thích</th></tr>${rows}</table></body></html>`;
+    const aiSegments = report.aiWriting.segments?.filter((item) => item.score >= 45).sort((left, right) => right.score - left.score).slice(0, 10).map((item) => `<tr><td>${escapeHtml(item.text)}</td><td>${item.label}</td><td>${item.score}%</td><td>${escapeHtml(item.reason)}</td></tr>`).join("") ?? "";
+    const provenance = report.aiWriting.provenance ? `<p>Quá trình: nhập trực tiếp ${report.aiWriting.provenance.typedShare}% · dán ${report.aiWriting.provenance.pastedShare}% · nhập tệp ${report.aiWriting.provenance.importedShare}% · AI hỗ trợ ${report.aiWriting.provenance.aiAssistedShare}%.</p><p>${escapeHtml(report.aiWriting.provenance.summary)}</p>` : "";
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>ORIGIN AI Report</title><style>body{font-family:Arial;line-height:1.6;margin:40px;color:#15242d}h1{color:#0b776f}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccd8dc;padding:8px;text-align:left}</style></head><body><h1>ORIGIN AI — Originality Report</h1><h2>${escapeHtml(title)}</h2><p>Nguyên bản: <b>${report.metrics.originality}%</b> · Tương đồng: <b>${report.metrics.similarity}%</b> · Nguồn: <b>${report.metrics.sourcesFound}</b></p><h3>Chỉ báo AI tổng hợp</h3><p><b>${report.aiWriting.score}%</b> · Độ tin cậy ${report.aiWriting.confidence ?? "—"}% · Đồng thuận ${report.aiWriting.agreement?.score ?? "—"}%</p><ul>${detectors}</ul>${provenance}<p>${escapeHtml(report.aiWriting.disclaimer)}</p>${aiSegments ? `<h3>Đoạn cần xem lại</h3><table><tr><th>Đoạn</th><th>Phân loại</th><th>Điểm</th><th>Giải thích</th></tr>${aiSegments}</table>` : ""}<h3>Matched passages</h3><table><tr><th>Câu</th><th>Phân loại</th><th>Similarity</th><th>Giải thích</th></tr>${rows}</table></body></html>`;
     const url = URL.createObjectURL(new Blob([html], { type: "application/msword" }));
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${slugify(title)}-origin-report.doc`; anchor.click(); URL.revokeObjectURL(url);
   }
@@ -150,7 +172,7 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
     const context = document.modelContext;
     if (!context?.registerTool) return;
     const lifecycle = new AbortController();
-    void Promise.resolve(context.registerTool({ name: "load_origin_sample", title: "Tải văn bản mẫu", description: "Điền văn bản mẫu tiếng Việt vào workspace ORIGIN AI để thử quy trình.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute: async () => { setText(sample); setTitle("AI trong giáo dục"); setView("edit"); return { loaded: true, characters: sample.length }; } }, { signal: lifecycle.signal })).catch(() => undefined);
+    void Promise.resolve(context.registerTool({ name: "load_origin_sample", title: "Tải văn bản mẫu", description: "Điền văn bản mẫu tiếng Việt vào workspace ORIGIN AI để thử quy trình.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute: async () => { provenanceRef.current = createProvenance(true, sample.length); setText(sample); setTitle("AI trong giáo dục"); setView("edit"); return { loaded: true, characters: sample.length }; } }, { signal: lifecycle.signal })).catch(() => undefined);
     void Promise.resolve(context.registerTool({ name: "scan_current_document", title: "Quét tài liệu hiện tại", description: "Chạy quy trình phân tích trùng lặp và nguồn trên văn bản đang mở trong ORIGIN AI.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: async () => { const result = await scanDocument(); return { completed: true, originality: result?.metrics.originality, similarity: result?.metrics.similarity, sourcesFound: result?.metrics.sourcesFound }; } }, { signal: lifecycle.signal })).catch(() => undefined);
     return () => lifecycle.abort();
   }, [scanDocument]);
@@ -171,7 +193,7 @@ export function Workspace({ user, startWithSample }: { user: SessionUser; startW
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4"><div><span className="text-[11px] font-bold uppercase tracking-[.18em] text-[var(--brand)]">ORIGINALITY WORKSPACE</span><h1 className="serif mt-1 text-[30px] font-normal">{view === "compare" ? "So sánh phiên bản" : view === "review" ? "Kết quả phân tích" : "Kiểm tra tài liệu"}</h1></div><div className="flex flex-wrap gap-2"><input ref={inputRef} type="file" accept=".docx,.pdf,.txt,.md" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadFile(file); event.target.value = ""; }} /><button onClick={() => inputRef.current?.click()} className="focus-ring flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-sm font-bold"><Upload size={16} /> Tải tệp</button>{report && <button onClick={() => setView(view === "review" ? "edit" : "review")} className="focus-ring rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-sm font-bold">{view === "review" ? "Chỉnh sửa" : "Xem highlight"}</button>}<button onClick={() => void scanDocument()} disabled={text.trim().length < 20 || scanning} className="focus-ring flex items-center gap-2 rounded-xl bg-[var(--brand)] px-5 py-2.5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(13,148,136,.18)] disabled:cursor-not-allowed disabled:opacity-40"><ScanLine size={17} /> {needsRescan ? "Quét lại" : "Quét tài liệu"}</button></div></div>
           {message && <div role="alert" className="mb-4 flex items-center justify-between rounded-xl bg-[var(--coral-soft)] px-4 py-3 text-sm text-[var(--coral)]"><span>{message}</span><button onClick={() => setMessage("")} aria-label="Đóng">×</button></div>}
           <MetricCards metrics={report?.metrics} aiWriting={report?.aiWriting} />
-          <div className="surface mt-5 overflow-hidden rounded-[22px]"><div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3"><div className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${view === "review" ? "bg-[var(--coral)]" : view === "compare" ? "bg-[var(--violet)]" : "bg-[var(--brand)]"}`} /><span className="text-[12px] font-bold uppercase tracking-[.14em] text-[var(--muted)]">{view === "review" ? "Sentence-level review" : view === "compare" ? "Before / After" : "Document editor"}</span></div><div className="flex items-center gap-3"><label className="hidden items-center gap-2 text-[11px] text-[var(--muted)] sm:flex"><input type="checkbox" checked={ephemeral} onChange={(event) => setEphemeral(event.target.checked)} /> Không lưu sau xử lý</label><button className="rounded-lg p-1.5 text-[var(--muted)]" aria-label="Tùy chọn"><MoreHorizontal size={18} /></button></div></div>{view === "review" && report ? <AnalysisViewer report={report} selectedId={selected?.sentenceId} onSelect={(sentence) => { setSelected(sentence); setRewrite(undefined); }} /> : view === "compare" ? <CompareView original={originalText} current={text} versions={versions} onRestore={restoreVersion} /> : <EditorPane value={text} onChange={(value) => { setText(value); if (report) setNeedsRescan(true); }} />}</div>
+          <div className="surface mt-5 overflow-hidden rounded-[22px]"><div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3"><div className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${view === "review" ? "bg-[var(--coral)]" : view === "compare" ? "bg-[var(--violet)]" : "bg-[var(--brand)]"}`} /><span className="text-[12px] font-bold uppercase tracking-[.14em] text-[var(--muted)]">{view === "review" ? "Sentence-level review" : view === "compare" ? "Before / After" : "Document editor"}</span></div><div className="flex items-center gap-3"><label className="hidden items-center gap-2 text-[11px] text-[var(--muted)] sm:flex"><input type="checkbox" checked={ephemeral} onChange={(event) => setEphemeral(event.target.checked)} /> Không lưu sau xử lý</label><button className="rounded-lg p-1.5 text-[var(--muted)]" aria-label="Tùy chọn"><MoreHorizontal size={18} /></button></div></div>{view === "review" && report ? <AnalysisViewer report={report} selectedId={selected?.sentenceId} onSelect={(sentence) => { setSelected(sentence); setRewrite(undefined); }} /> : view === "compare" ? <CompareView original={originalText} current={text} versions={versions} onRestore={restoreVersion} /> : <EditorPane value={text} onActivity={recordActivity} onChange={(value) => { setText(value); if (report) setNeedsRescan(true); }} />}</div>
         </div></section>
 
         <AssistantPanel report={report} selected={selected} rewrite={rewrite} rewriting={rewriting} writingSample={writingSample} onWritingSample={setWritingSample} onRewrite={requestRewrite} onAccept={acceptRewrite} onPrint={() => window.print()} onDownload={downloadWordReport} />

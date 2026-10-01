@@ -13,6 +13,18 @@ const schema = z.object({
   documentId: z.string().uuid().optional(),
   ephemeral: z.boolean().default(false),
   forceInline: z.boolean().default(false),
+  provenance: z.object({
+    sessionStartedAt: z.string().datetime(),
+    durationMs: z.number().int().min(0).max(31_536_000_000),
+    inputCharacters: z.number().int().min(0).max(10_000_000),
+    pastedCharacters: z.number().int().min(0).max(10_000_000),
+    importedCharacters: z.number().int().min(0).max(10_000_000),
+    aiAssistedCharacters: z.number().int().min(0).max(10_000_000),
+    pasteEvents: z.number().int().min(0).max(100_000),
+    editEvents: z.number().int().min(0).max(1_000_000),
+    revisionCount: z.number().int().min(0).max(100_000),
+    imported: z.boolean(),
+  }).optional(),
 });
 
 export async function POST(request: Request) {
@@ -41,10 +53,11 @@ export async function POST(request: Request) {
       text: parsed.data.text,
       documentId: persisted?.documentId,
       ownerEmail: session.email,
+      provenance: parsed.data.provenance,
     }, { removeOnComplete: { age: 3600 }, removeOnFail: { age: 86_400 } });
     return NextResponse.json({ queued: true, jobId: job.id, documentId: persisted?.documentId });
   }
 
-  const report = await runScan(parsed.data.text);
+  const report = await runScan(parsed.data.text, { provenance: parsed.data.provenance });
   return NextResponse.json({ queued: false, report, documentId: persisted?.documentId, persistence: persisted ? "database" : "session" });
 }

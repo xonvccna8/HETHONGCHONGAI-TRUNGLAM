@@ -1,9 +1,19 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import type { AiWritingSignals, AuthorshipLabel } from "@/src/core/types";
+import type { AiWritingSignals, AuthorshipLabel, AuthorshipSegment, WritingProvenance } from "@/src/core/types";
+import { analyzeWritingSignals } from "@/src/core/writing-signals";
 
 type Detector = NonNullable<AiWritingSignals["detectors"]>[number];
-type Observation = Detector & { flaggedShare?: number };
+type SegmentInput = Pick<AuthorshipSegment, "id" | "start" | "end" | "text">;
+type Observation = Detector & { flaggedShare?: number; segments?: AuthorshipSegment[] };
+
+const segmentReviewSchema = z.object({
+  index: z.number().int().min(0),
+  label: z.enum(["human", "mixed", "ai", "inconclusive"]),
+  aiLikelihood: z.number().min(0).max(1),
+  confidence: z.number().min(0).max(1),
+  reason: z.string().min(1).max(260),
+});
 
 const reviewerSchema = z.object({
   label: z.enum(["human", "mixed", "ai", "inconclusive"]),
@@ -11,6 +21,7 @@ const reviewerSchema = z.object({
   confidence: z.number().min(0).max(1),
   rationale: z.string().min(1).max(500),
   signals: z.array(z.string().min(1).max(180)).max(5),
+  segments: z.array(segmentReviewSchema).max(30),
 });
 
 const reviewerJsonSchema = {
@@ -21,8 +32,24 @@ const reviewerJsonSchema = {
     confidence: { type: "number", minimum: 0, maximum: 1 },
     rationale: { type: "string" },
     signals: { type: "array", items: { type: "string" }, maxItems: 5 },
+    segments: {
+      type: "array",
+      maxItems: 30,
+      items: {
+        type: "object",
+        properties: {
+          index: { type: "integer", minimum: 0 },
+          label: { type: "string", enum: ["human", "mixed", "ai", "inconclusive"] },
+          aiLikelihood: { type: "number", minimum: 0, maximum: 1 },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          reason: { type: "string" },
+        },
+        required: ["index", "label", "aiLikelihood", "confidence", "reason"],
+        additionalProperties: false,
+      },
+    },
   },
-  required: ["label", "aiLikelihood", "confidence", "rationale", "signals"],
+  required: ["label", "aiLikelihood", "confidence", "rationale", "signals", "segments"],
   additionalProperties: false,
 } as const;
 
@@ -32,10 +59,68 @@ function clampPercentage(value: number) {
   return Math.round(Math.max(0, Math.min(100, value)));
 }
 
+export function buildAuthorshipSegments(text: string, maxSegments = 24): SegmentInput[] {
+  const clean = text.trim();
+  if (!clean) return [];
+  const leading = text.indexOf(clean);
+  const targetSize = Math.max(500, Math.ceil(clean.length / Math.max(1, maxSegments)));
+  const segments: SegmentInput[] = [];
+  let cursor = 0;
+  while (cursor < clean.length && segments.length < maxSegments) {
+    let end = Math.min(clean.length, cursor + targetSize);
+    if (end < clean.length) {
+      const forwardBreak = clean.slice(end, Math.min(clean.length, end + 260)).search(/\n\s*\n|[.!?](?:\s|$)/u);
+      if (forwardBreak >= 0) end += forwardBreak + 1;
+      else {
+        const backwardBreak = clean.slice(cursor + 220, end).search(/\n\s*\n|[.!?](?:\s|$)/u);
+        if (backwardBreak >= 0) end = cursor + 220 + backwardBreak + 1;
+      }
+    }
+    if (segments.length === maxSegments - 1) end = clean.length;
+    const raw = clean.slice(cursor, end);
+    const leftTrim = raw.length - raw.trimStart().length;
+    const value = raw.trim();
+    if (value) {
+      const start = leading + cursor + leftTrim;
+      segments.push({ id: `ai-segment-${segments.length + 1}`, start, end: start + value.length, text: value });
+    }
+    cursor = Math.max(end, cursor + 1);
+    while (/\s/u.test(clean[cursor] ?? "")) cursor += 1;
+  }
+  return segments;
+}
+
+export function buildProvenanceEvidence(provenance: WritingProvenance | undefined, textLength: number): NonNullable<AiWritingSignals["provenance"]> {
+  if (!provenance) {
+    return { status: "unavailable", evidenceStrength: 0, typedShare: 0, pastedShare: 0, importedShare: 0, aiAssistedShare: 0, durationMinutes: 0, editEvents: 0, revisionCount: 0, summary: "Không có lịch sử tạo tài liệu; hệ thống chỉ đánh giá văn bản cuối cùng." };
+  }
+  const observed = Math.max(1, provenance.inputCharacters + provenance.pastedCharacters + provenance.importedCharacters + provenance.aiAssistedCharacters);
+  const typedShare = clampPercentage(provenance.inputCharacters / observed * 100);
+  const pastedShare = clampPercentage(provenance.pastedCharacters / observed * 100);
+  const importedShare = clampPercentage(provenance.importedCharacters / observed * 100);
+  const aiAssistedShare = clampPercentage(provenance.aiAssistedCharacters / observed * 100);
+  const durationMinutes = Math.max(0, Math.round(provenance.durationMs / 60_000));
+  const interactionEvidence = Math.min(45, provenance.editEvents * 2) + Math.min(25, durationMinutes * 2) + Math.min(20, provenance.revisionCount * 5);
+  const coverage = textLength ? Math.min(10, observed / textLength * 10) : 0;
+  const evidenceStrength = clampPercentage(interactionEvidence + coverage);
+  const status = provenance.imported && provenance.editEvents < 2 ? "partial" : evidenceStrength >= 35 ? "available" : "partial";
+  const summary = status === "available"
+    ? `Đã ghi nhận ${provenance.editEvents} lượt chỉnh sửa trong khoảng ${durationMinutes} phút và ${provenance.revisionCount} phiên bản.`
+    : "Lịch sử hiện có còn ngắn hoặc tài liệu chủ yếu được nhập từ bên ngoài; không dùng riêng tín hiệu này để kết luận.";
+  return { status, evidenceStrength, typedShare, pastedShare, importedShare, aiAssistedShare, durationMinutes, editEvents: provenance.editEvents, revisionCount: provenance.revisionCount, summary };
+}
+
 function labelFromScore(score: number): AuthorshipLabel {
   if (score < 35) return "human";
   if (score < 65) return "mixed";
   return "ai";
+}
+
+function localSegmentObservations(segments: SegmentInput[]): AuthorshipSegment[] {
+  return segments.map((segment) => {
+    const local = analyzeWritingSignals(segment.text);
+    return { ...segment, label: labelFromScore(local.score), score: local.score, confidence: 25, reason: "Ước lượng cục bộ từ đặc trưng văn phong; cần detector độc lập để xác nhận.", detector: "stylometry" };
+  });
 }
 
 function unavailable(id: Detector["id"], name: string, detail: string): Observation {
@@ -59,7 +144,7 @@ function stylometryObservation(local: AiWritingSignals): Observation {
   };
 }
 
-async function openAiObservation(text: string, local: AiWritingSignals): Promise<Observation> {
+async function openAiObservation(local: AiWritingSignals, segments: SegmentInput[]): Promise<Observation> {
   if (!process.env.OPENAI_API_KEY || process.env.AI_AUTHORSHIP_REVIEW_ENABLED === "false") {
     return unavailable("openai-reviewer", "GPT‑6 Astra phản biện", "Chưa bật bộ phản biện OpenAI.");
   }
@@ -76,13 +161,23 @@ async function openAiObservation(text: string, local: AiWritingSignals): Promise
         "Estimate whether the prose shows human authorship, AI assistance, or likely AI generation.",
         "Use linguistic evidence only. Do not claim certainty, identify a specific model, or treat polished academic style as proof.",
         "Account for false positives affecting formal writing, second-language writers, editing, translation and short samples.",
+        "Review every supplied segment independently. Segment indexes must match the provided indexes exactly.",
         "Return inconclusive with low confidence when evidence is weak. Keep rationale in the document language.",
       ].join("\n"),
-      input: `LOCAL_SIGNAL_DATA:\n${JSON.stringify({ score: local.score, risk: local.risk, signals: local.signals })}\n\nDOCUMENT_CONTENT_DATA:\n${text.slice(0, 80_000)}`,
+      input: `LOCAL_SIGNAL_DATA:\n${JSON.stringify({ score: local.score, risk: local.risk, signals: local.signals })}\n\nSEGMENTS_DATA:\n${JSON.stringify(segments.map((segment, index) => ({ index, text: segment.text })))}`,
       text: { format: { type: "json_schema", name: "authorship_review", strict: true, schema: reviewerJsonSchema } },
-      max_output_tokens: 900,
+      max_output_tokens: 3200,
     });
     const parsed = reviewerSchema.parse(JSON.parse(response.output_text));
+    const reviews = new Map(parsed.segments.map((review) => [review.index, review]));
+    const reviewedSegments = segments.map((segment, index) => {
+      const review = reviews.get(index);
+      if (!review) {
+        const fallback = analyzeWritingSignals(segment.text);
+        return { ...segment, label: "inconclusive" as const, score: fallback.score, confidence: 20, reason: "Bộ phản biện không trả kết quả cho đoạn này; chỉ giữ chỉ báo văn phong cục bộ.", detector: "stylometry-fallback" };
+      }
+      return { ...segment, label: review.label, score: clampPercentage(review.aiLikelihood * 100), confidence: clampPercentage(Math.min(review.confidence, 0.8) * 100), reason: review.reason, detector: model };
+    });
     return {
       id: "openai-reviewer",
       name: "GPT‑6 Astra phản biện",
@@ -92,6 +187,7 @@ async function openAiObservation(text: string, local: AiWritingSignals): Promise
       label: parsed.label,
       detail: parsed.rationale,
       model,
+      segments: reviewedSegments,
     };
   } catch (error) {
     console.error("OpenAI authorship reviewer failed", error);
@@ -204,12 +300,60 @@ async function faidObservation(text: string): Promise<Observation> {
   }
 }
 
-function ensemble(local: AiWritingSignals, observations: Observation[]): AiWritingSignals {
+async function vietAiDetectorObservation(text: string): Promise<Observation> {
+  const endpoint = process.env.VIET_AI_DETECTOR_API_URL;
+  if (!endpoint) return unavailable("vietaidetector", "VietAIDetector zero-shot", "Sẵn sàng kết nối; cần endpoint GPU của VietAIDetector.");
+  try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (process.env.VIET_AI_DETECTOR_API_TOKEN) headers.Authorization = `Bearer ${process.env.VIET_AI_DETECTOR_API_TOKEN}`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ text: text.slice(0, 100_000), language: "vi", thresholdMode: "low-false-positive" }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok) throw new Error(`VietAIDetector endpoint failed (${response.status})`);
+    const body = await response.json() as Record<string, unknown>;
+    const raw = (body.probabilities ?? body.scores ?? body) as Record<string, unknown>;
+    const ai = numericValue(raw.ai ?? raw.ai_score ?? raw.machine ?? raw.score ?? body.aiScore);
+    const human = numericValue(raw.human ?? raw.human_score ?? (ai > 0 ? 1 - ai : 0));
+    if (ai + human <= 0) throw new Error("VietAIDetector endpoint returned an unsupported response shape");
+    const normalizedAi = ai / (ai + human);
+    const score = clampPercentage(normalizedAi * 100);
+    const rawLabel = String(body.label ?? raw.label ?? "").toLowerCase();
+    const label = rawLabel.includes("human") ? "human" : rawLabel.includes("mix") || rawLabel.includes("collab") ? "mixed" : rawLabel.includes("ai") || rawLabel.includes("machine") ? "ai" : labelFromScore(score);
+    return {
+      id: "vietaidetector",
+      name: "VietAIDetector zero-shot",
+      status: "completed",
+      score,
+      confidence: clampPercentage(Math.max(normalizedAi, 1 - normalizedAi) * 100),
+      label,
+      detail: "Kiểm tra zero-shot bằng mô hình ngôn ngữ Việt, ưu tiên ngưỡng báo nhầm thấp.",
+      model: typeof body.model === "string" ? body.model : "VietAIDetector",
+    };
+  } catch (error) {
+    console.error("VietAIDetector failed", error);
+    return failed("vietaidetector", "VietAIDetector zero-shot");
+  }
+}
+
+function ensemble(local: AiWritingSignals, observations: Observation[], provenance: WritingProvenance | undefined, textLength: number, localSegments: AuthorshipSegment[]): AiWritingSignals {
   const completed = observations.filter((item) => item.status === "completed" && item.score !== undefined);
   const external = completed.filter((item) => item.id !== "stylometry");
-  if (!external.length) return { ...local, method: "stylometry", label: "inconclusive", confidence: 25, detectors: observations };
+  const provenanceEvidence = buildProvenanceEvidence(provenance, textLength);
+  if (!external.length) return {
+    ...local,
+    method: "stylometry",
+    label: "inconclusive",
+    confidence: 25,
+    detectors: observations,
+    segments: localSegments,
+    provenance: provenanceEvidence,
+    agreement: { score: 0, status: "weak", completedDetectors: 1, message: "Chỉ có một phương pháp hoạt động nên chưa thể kiểm tra chéo." },
+  };
 
-  const weights: Record<Detector["id"], number> = { stylometry: 0.1, "openai-reviewer": 0.2, copyleaks: 0.35, faid: 0.35 };
+  const weights: Record<Detector["id"], number> = { stylometry: 0.08, "openai-reviewer": 0.17, copyleaks: 0.25, faid: 0.25, vietaidetector: 0.25 };
   const weightTotal = completed.reduce((sum, item) => sum + weights[item.id], 0);
   const score = clampPercentage(completed.reduce((sum, item) => sum + (item.score ?? 0) * weights[item.id], 0) / weightTotal);
   const mean = completed.reduce((sum, item) => sum + (item.score ?? 0), 0) / completed.length;
@@ -218,25 +362,46 @@ function ensemble(local: AiWritingSignals, observations: Observation[]): AiWriti
   const agreement = Math.max(0, 100 - deviation * 2);
   const confidence = clampPercentage(evidenceConfidence * 0.7 + agreement * 0.3);
   const risk = score < 25 ? "very-low" : score < 45 ? "low" : score < 65 ? "medium" : "high";
+  const agreementStatus = agreement >= 70 ? "strong" : agreement >= 45 ? "moderate" : "weak";
+  const shouldAbstain = (completed.length >= 3 && agreementStatus === "weak") || (score >= 40 && score <= 60 && confidence < 65);
+  const reviewedSegments = observations.find((item) => item.id === "openai-reviewer")?.segments;
+  const segments = reviewedSegments?.length ? reviewedSegments : localSegments;
+  const segmentCharacters = segments.reduce((sum, segment) => sum + segment.text.length, 0);
+  const segmentFlaggedShare = segmentCharacters
+    ? clampPercentage(segments.filter((segment) => segment.score >= 65).reduce((sum, segment) => sum + segment.text.length, 0) / segmentCharacters * 100)
+    : undefined;
   return {
     ...local,
     risk,
     score,
     confidence,
-    label: confidence < 40 ? "inconclusive" : labelFromScore(score),
-    flaggedShare: observations.find((item) => item.id === "copyleaks")?.flaggedShare,
+    label: confidence < 40 || shouldAbstain ? "inconclusive" : labelFromScore(score),
+    flaggedShare: observations.find((item) => item.id === "copyleaks")?.flaggedShare ?? segmentFlaggedShare,
     method: "multi-detector-ensemble",
     detectors: observations,
+    segments,
+    provenance: provenanceEvidence,
+    agreement: {
+      score: clampPercentage(agreement),
+      status: agreementStatus,
+      completedDetectors: completed.length,
+      message: shouldAbstain
+        ? "Các bộ máy chưa đủ đồng thuận; hệ thống chủ động không đưa ra kết luận tác giả."
+        : agreementStatus === "strong" ? "Các phương pháp độc lập cho kết quả tương đối nhất quán." : "Kết quả có chênh lệch; nên xem các đoạn và bằng chứng quá trình.",
+    },
     disclaimer: "Đây là chỉ báo tổng hợp, không phải bằng chứng tác giả. Không dùng kết quả này làm căn cứ duy nhất cho quyết định kỷ luật hoặc đánh giá.",
   };
 }
 
-export async function runAuthorshipEnsemble(text: string, local: AiWritingSignals): Promise<AiWritingSignals> {
+export async function runAuthorshipEnsemble(text: string, local: AiWritingSignals, provenance?: WritingProvenance): Promise<AiWritingSignals> {
+  const segmentInputs = buildAuthorshipSegments(text);
+  const localSegments = localSegmentObservations(segmentInputs);
   const observations = await Promise.all([
     Promise.resolve(stylometryObservation(local)),
-    openAiObservation(text, local),
+    openAiObservation(local, segmentInputs),
     copyleaksObservation(text),
     faidObservation(text),
+    vietAiDetectorObservation(text),
   ]);
-  return ensemble(local, observations);
+  return ensemble(local, observations, provenance, text.length, localSegments);
 }

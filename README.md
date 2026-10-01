@@ -14,7 +14,9 @@ ORIGIN AI là workspace kiểm tra trùng lặp, truy tìm nguồn và hỗ tr�
 - Sentence-level review, exact/fuzzy/semantic score và giải thích.
 - Originality Rewrite Agent với bốn chế độ, Responses API Structured Outputs và fallback cục bộ khi chưa có khóa.
 - Citation Guard, Fact Preservation, AI Authorship Ensemble và Human Writing Coach.
-- AI Authorship Ensemble kết hợp tín hiệu văn phong, GPT‑6 Astra phản biện, Copyleaks tiếng Việt và FAID endpoint; detector chưa cấu hình được hiển thị rõ thay vì âm thầm tạo điểm giả.
+- AI Authorship Ensemble kết hợp tín hiệu văn phong, GPT‑6 Astra phản biện, Copyleaks, FAID và VietAIDetector; detector chưa cấu hình được hiển thị rõ thay vì âm thầm tạo điểm giả.
+- Phân tích tác giả theo từng đoạn, đo mức đồng thuận và chủ động trả về “chưa đủ bằng chứng” khi các detector xung đột.
+- Bằng chứng quá trình ghi nhận tỷ lệ nhập trực tiếp, dán, nhập tệp, AI hỗ trợ, thời gian chỉnh sửa và số phiên bản; đây là dữ liệu hỗ trợ, không phải chữ ký pháp lý.
 - Preview/accept rewrite, before/after, version history, restore và smart rescan theo fingerprint.
 - Report có bản in/PDF và bản Word-compatible.
 - PostgreSQL + pgvector schema, Redis/BullMQ worker, Docker Compose.
@@ -61,6 +63,7 @@ Sao chép `.env.example`; không commit `.env`.
 - `AI_AUTHORSHIP_REVIEW_ENABLED`, `AI_AUTHORSHIP_REVIEW_MODEL`: bật bộ phản biện tác giả bằng OpenAI Structured Outputs.
 - `COPYLEAKS_EMAIL`, `COPYLEAKS_API_KEY`: bật Copyleaks AI Detector; `COPYLEAKS_SENSITIVITY` nhận giá trị 1–3.
 - `FAID_API_URL`, `FAID_API_TOKEN`: kết nối dịch vụ FAID chạy trên GPU. Endpoint nhận `{ text, language }` và trả `probabilities` hoặc `scores` gồm `human`, `llm`/`ai`, `collaborative`/`mixed`.
+- `VIET_AI_DETECTOR_API_URL`, `VIET_AI_DETECTOR_API_TOKEN`: kết nối VietAIDetector chạy trên GPU. Endpoint nhận `{ text, language, thresholdMode }` và trả điểm `ai`/`human` hoặc `ai_score`.
 - `DATABASE_URL`: persistence PostgreSQL; nếu bỏ trống app chạy session mode.
 - `REDIS_URL`: queue, progress và cache; nếu bỏ trống scan chạy inline.
 - `SEARCH_PROVIDER`: `openai`, `tavily`, `serper` hoặc `none`.

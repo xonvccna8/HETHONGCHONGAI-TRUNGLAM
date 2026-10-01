@@ -1,10 +1,11 @@
 import { Queue } from "bullmq";
-import type { ScanReport } from "@/src/core/types";
+import type { ScanReport, WritingProvenance } from "@/src/core/types";
 
 export interface ScanJobData {
   text: string;
   documentId?: string;
   ownerEmail: string;
+  provenance?: WritingProvenance;
 }
 
 function connectionOptions() {

@@ -5,9 +5,10 @@ import { parseDocument } from "@/src/core/text";
 import { runAiCouncil } from "@/src/agents/council";
 import { analyzeWritingSignals } from "@/src/core/writing-signals";
 import { runAuthorshipEnsemble } from "./authorship-detector";
+import type { WritingProvenance } from "@/src/core/types";
 
-export async function runScan(text: string) {
-  const authorship = runAuthorshipEnsemble(text, analyzeWritingSignals(text));
+export async function runScan(text: string, options: { provenance?: WritingProvenance } = {}) {
+  const authorship = runAuthorshipEnsemble(text, analyzeWritingSignals(text), options.provenance);
   const sources = await discoverSources(text);
   const parsed = parseDocument(text);
   const sourceTexts = sources.map((source) => source.snippet).filter(Boolean);
