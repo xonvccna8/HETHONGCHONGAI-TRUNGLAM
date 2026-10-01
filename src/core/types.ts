@@ -95,6 +95,7 @@ export interface SentenceAnalysis {
   exactScore: number;
   fuzzyScore: number;
   semanticScore: number;
+  internalSimilarity?: number;
   sourceId?: string;
   sourceText?: string;
   reason: string;

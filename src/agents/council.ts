@@ -82,6 +82,8 @@ function evidencePack(text: string, report: ScanReport) {
       exactScore: item.exactScore,
       fuzzyScore: item.fuzzyScore,
       semanticScore: item.semanticScore,
+      internalSimilarity: item.internalSimilarity,
+      internalMatchSentenceId: item.internalMatchSentenceId,
       sourceId: item.sourceId,
       sourceText: item.sourceText?.slice(0, 500),
       citationProtected: item.citationProtected,

@@ -153,7 +153,10 @@ export function analyzeSimilarity(
   const sourceCandidates = candidates.filter((candidate) => candidate.source);
   const neighborWindow = parsed.sentences.length > 200 ? 12 : parsed.sentences.length;
   const sentences: SentenceAnalysis[] = parsed.sentences.map((sentence, sentenceIndex) => {
-    let best: { scores: ReturnType<typeof comparePassages>; id?: string; text?: string; source?: DiscoveredSource } = {
+    let bestSource: { scores: ReturnType<typeof comparePassages>; id?: string; text?: string; source?: DiscoveredSource } = {
+      scores: { exact: 0, fuzzy: 0, semantic: 0, weighted: 0 },
+    };
+    let bestInternal: { scores: ReturnType<typeof comparePassages>; id?: string } = {
       scores: { exact: 0, fuzzy: 0, semantic: 0, weighted: 0 },
     };
     let matchedSourceCount = 0;
@@ -173,31 +176,40 @@ export function analyzeSimilarity(
         : lexicalScores;
       const scores = semanticScoresForPassage.weighted >= lexicalScores.weighted ? semanticScoresForPassage : lexicalScores;
       const passage = semanticScoresForPassage.weighted >= lexicalScores.weighted ? semanticPassage ?? lexicalPassage : lexicalPassage;
-      if (candidate.source && scores.weighted >= 0.38) matchedSourceCount += 1;
-      if (scores.weighted > best.scores.weighted) best = { scores, id: candidate.id, text: passage, source: candidate.source };
+      if (candidate.source) {
+        if (scores.weighted >= 0.38) matchedSourceCount += 1;
+        if (scores.weighted > bestSource.scores.weighted) bestSource = { scores, id: candidate.id, text: passage, source: candidate.source };
+      } else if (scores.weighted > bestInternal.scores.weighted) {
+        bestInternal = { scores, id: candidate.id };
+      }
     }
-    const classification = classify(sentence.text, best.scores, Boolean(best.source));
-    const similarity = Math.round(best.scores.weighted * 100);
-    const crossLanguageLikely = Boolean(best.source && best.scores.semantic >= 0.74 && best.scores.exact < 0.16 && best.scores.fuzzy < 0.35);
-    const evidenceLevel = best.source && (best.scores.weighted >= 0.65 || best.scores.exact >= 0.75)
+    const classification = classify(sentence.text, bestSource.scores, Boolean(bestSource.source));
+    const internalSimilarity = Math.round(bestInternal.scores.weighted * 100);
+    const similarity = Math.round(bestSource.scores.weighted * 100);
+    const crossLanguageLikely = Boolean(bestSource.source && bestSource.scores.semantic >= 0.74 && bestSource.scores.exact < 0.16 && bestSource.scores.fuzzy < 0.35);
+    const evidenceLevel = bestSource.source && (bestSource.scores.weighted >= 0.65 || bestSource.scores.exact >= 0.75)
       ? "strong"
-      : best.source && (best.scores.weighted >= 0.43 || best.scores.semantic >= 0.72)
+      : bestSource.source && (bestSource.scores.weighted >= 0.43 || bestSource.scores.semantic >= 0.72)
         ? "moderate"
         : "weak";
+    const reason = crossLanguageLikely
+      ? "Phát hiện tương đồng ngữ nghĩa mạnh với nguồn khác ngôn ngữ; cần kiểm chứng bản dịch hoặc cách diễn đạt lại."
+      : classification.kind === "ORIGINAL" && internalSimilarity >= 62
+        ? "Câu này lặp nội dung với câu khác trong chính tài liệu; đây không phải bằng chứng khớp nguồn bên ngoài."
+        : classification.reason;
     return {
       sentenceId: sentence.id,
       text: sentence.text,
       kind: classification.kind,
       similarity,
-      exactScore: Math.round(best.scores.exact * 100),
-      fuzzyScore: Math.round(best.scores.fuzzy * 100),
-      semanticScore: Math.round(best.scores.semantic * 100),
-      sourceId: best.source?.id,
-      sourceText: best.text,
-      internalMatchSentenceId: best.source ? undefined : best.id,
-      reason: crossLanguageLikely
-        ? "Phát hiện tương đồng ngữ nghĩa mạnh với nguồn khác ngôn ngữ; cần kiểm chứng bản dịch hoặc cách diễn đạt lại."
-        : classification.reason,
+      exactScore: Math.round(bestSource.scores.exact * 100),
+      fuzzyScore: Math.round(bestSource.scores.fuzzy * 100),
+      semanticScore: Math.round(bestSource.scores.semantic * 100),
+      internalSimilarity,
+      sourceId: bestSource.source?.id,
+      sourceText: bestSource.text,
+      internalMatchSentenceId: internalSimilarity >= 62 ? bestInternal.id : undefined,
+      reason,
       suggestedAction:
         classification.kind === "CITED" || classification.kind === "QUOTED"
           ? "Kiểm tra định dạng và giữ nguyên nguồn."

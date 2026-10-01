@@ -24,8 +24,9 @@ export function AnalysisViewer({ report, selectedId, onSelect }: { report: ScanR
         <div className="space-y-3">
           {report.sentences.map((sentence, index) => {
             const meta = kindMeta[sentence.kind];
-            return <button key={sentence.sentenceId} onClick={() => onSelect(sentence)} className={`focus-ring group block w-full rounded-2xl border p-4 text-left transition ${meta.className} ${selectedId === sentence.sentenceId ? "ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--surface)]" : "hover:-translate-y-0.5"}`}>
-              <div className="mb-2 flex items-center justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.1em] text-[var(--muted)]">Câu {index + 1}</span>{sentence.kind !== "ORIGINAL" && <span className="rounded-full bg-[var(--surface)]/70 px-2.5 py-1 text-[11px] font-bold">{meta.label} · {sentence.similarity}%</span>}</div>
+            const repeatedInternally = sentence.kind === "ORIGINAL" && (sentence.internalSimilarity ?? 0) >= 62;
+            return <button key={sentence.sentenceId} onClick={() => onSelect(sentence)} className={`focus-ring group block w-full rounded-2xl border p-4 text-left transition ${repeatedInternally ? "bg-[var(--surface-2)] border-[var(--line)]" : meta.className} ${selectedId === sentence.sentenceId ? "ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-[var(--surface)]" : "hover:-translate-y-0.5"}`}>
+              <div className="mb-2 flex items-center justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.1em] text-[var(--muted)]">Câu {index + 1}</span>{sentence.kind !== "ORIGINAL" ? <span className="rounded-full bg-[var(--surface)]/70 px-2.5 py-1 text-[11px] font-bold">{meta.label} · {sentence.similarity}%</span> : repeatedInternally ? <span className="rounded-full bg-[var(--surface)]/70 px-2.5 py-1 text-[11px] font-bold">Lặp trong tài liệu · {sentence.internalSimilarity}%</span> : null}</div>
               <p className="serif text-[16px] leading-7">{sentence.text}</p>
             </button>;
           })}
