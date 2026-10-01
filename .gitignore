@@ -1,8 +1,14 @@
 node_modules/
 .next/
 coverage/
+
+# Local environment variables and Vercel project metadata
 .env
 .env.local
+.env.*
+!.env.example
+.vercel/
+
 *.log
 *.tsbuildinfo
 uploads/
